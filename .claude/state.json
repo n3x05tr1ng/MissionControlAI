@@ -1,0 +1,27 @@
+{
+  "projectId": "hive",
+  "status": "done",
+  "nextStep": "Wirear /api/system/mcp-servers en la UI de /profiles/[id] para mostrar disponibilidad real de MCPs (verde/gris/needs_auth). Ver handoff.md.",
+  "blockers": [],
+  "openQuestions": [
+    "Profiles deberían poder definir MCPs no presentes en config global? Actual: sólo activar lo ya configurado.",
+    "Usar --strict-mcp-config para sandbox real? Requiere replicar config + OAuth tokens (complejo).",
+    "Parser de 'claude mcp list' es regex-frágil; explorar 'claude mcp list --json' si existe."
+  ],
+  "lastSession": {
+    "id": "mcp-wiring-2026-05-24",
+    "endedAt": "2026-05-24T19:35:00.000Z",
+    "model": "claude-opus-4-7",
+    "result": "success",
+    "costUsd": 0,
+    "tokens": { "input": 0, "output": 0 },
+    "filesTouched": [
+      "src/lib/providers/claudeCli.ts",
+      "src/lib/providers/claudeCliPath.ts",
+      "src/app/api/system/mcp-servers/route.ts",
+      ".claude/handoff.md",
+      ".claude/state.json"
+    ]
+  },
+  "updatedAt": "2026-05-24T19:35:00.000Z"
+}

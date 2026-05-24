@@ -1,0 +1,16 @@
+name: nightly-status
+description: Summarise where each project stands and write the handoff.
+schedule: "0 22 * * *"
+steps:
+  - id: pull
+    run: git pull --ff-only
+    in: project
+    projectId: <your-project-id>
+  - id: summary
+    agent: claude-code
+    projectId: <your-project-id>
+    prompt: |
+      Read .claude/handoff.md. Summarise where this project stands today
+      and update .claude/state.json. End by re-writing handoff.md.
+    flags:
+      planMode: true

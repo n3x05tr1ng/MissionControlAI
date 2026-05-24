@@ -1,26 +1,107 @@
 @import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-hive-bg: #0b0d0f;
+  --color-hive-panel: #13161a;
+  --color-hive-border: #23282e;
+  --color-hive-text: #e6e6e6;
+  --color-hive-muted: #7a8088;
+  --color-hive-amber: #FFB000;
+  --color-hive-amber-dim: #a87400;
+  --color-hive-green: #3ddc97;
+  --color-hive-red: #ff5c5c;
+  --color-hive-cyan: #5cc8ff;
+  --color-hive-yellow: #ffd23f;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html, body {
+  background: var(--color-hive-bg);
+  color: var(--color-hive-text);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv02";
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+* {
+  border-color: var(--color-hive-border);
+}
+
+/* Terminal-style scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-hive-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-hive-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-hive-amber-dim);
+}
+
+/* Selection */
+::selection {
+  background: var(--color-hive-amber);
+  color: var(--color-hive-bg);
+}
+
+/* Modal open animation: subtle fade + scale, ~150ms */
+@keyframes hive-modal-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes hive-modal-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.hive-modal-overlay {
+  animation: hive-modal-overlay-in 150ms ease-out;
+}
+
+.hive-modal-panel {
+  animation: hive-modal-panel-in 150ms ease-out;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hive-modal-overlay,
+  .hive-modal-panel {
+    animation: none;
+  }
+}
+
+/* Subtle global interactive polish.
+ * Adds a 150ms ease-out transition to color/border/background on common
+ * interactive elements, so hover states feel smooth without any per-component
+ * Tailwind churn. Already-transitioned elements override this naturally. */
+a,
+button,
+[role="button"],
+summary {
+  transition-property: color, background-color, border-color, opacity, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  a,
+  button,
+  [role="button"],
+  summary {
+    transition: none;
+  }
 }
