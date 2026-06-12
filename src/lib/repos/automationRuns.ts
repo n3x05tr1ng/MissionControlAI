@@ -373,7 +373,12 @@ export async function setHumanReviewDecision(
   // Defer to orchestrator. Imported lazily to avoid a circular dep.
   try {
     const mod = await import("@/lib/automations/orchestrator");
-    void mod.resumeRunAfterHuman(runId, verdict, feedback);
+    void mod.resumeRunAfterHuman(runId, verdict, feedback).catch((err) => {
+      process.stderr.write(
+        `[automationRuns] resumeRunAfterHuman failed: ${(err as Error).message}
+`,
+      );
+    });
   } catch (err) {
     process.stderr.write(
       `[automationRuns] resumeRunAfterHuman import failed: ${(err as Error).message}\n`,

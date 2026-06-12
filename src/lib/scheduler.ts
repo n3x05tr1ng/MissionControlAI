@@ -30,6 +30,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 let started = false;
 let jobs: ScheduledTask[] = [];
+let tickInFlight = false;
 let lastTickAt: string | null = null;
 let lastNudgeCheckMs = 0;
 let startedAtIso: string | null = null;
@@ -37,6 +38,10 @@ let startedAtIso: string | null = null;
 async function fireReminder(r: ReminderRow): Promise<void> {
   const type = r.kind === "auto-nudge" ? "nudge" : "reminder";
   const title = r.kind === "auto-nudge" ? "Hive nudge" : "Hive reminder";
+
+  // Mark fired BEFORE the (slow) native notification so an overlapping tick
+  // or a crash mid-send can never fire the same reminder twice.
+  updateReminderStatus(r.id, "fired");
 
   await sendNativeNotification({ title, message: r.message });
 
@@ -48,8 +53,6 @@ async function fireReminder(r: ReminderRow): Promise<void> {
       project_id: r.project_id,
     }),
   );
-
-  updateReminderStatus(r.id, "fired");
 }
 
 function checkAutoNudges(nowMs: number): void {
@@ -71,11 +74,17 @@ function checkAutoNudges(nowMs: number): void {
     const ageMs = nowMs - lastMs;
     if (ageMs < threshold) continue;
 
+    // Skip when a nudge is pending OR one was created within the staleness
+    // window (fired/dismissed) — otherwise a stale project would get a fresh
+    // nudge every hourly check, forever.
     const existing = listRemindersForProject(row.project_id);
-    const hasPendingNudge = existing.some(
-      (r) => r.kind === "auto-nudge" && r.status === "pending",
-    );
-    if (hasPendingNudge) continue;
+    const hasRecentNudge = existing.some((r) => {
+      if (r.kind !== "auto-nudge") return false;
+      if (r.status === "pending") return true;
+      const createdMs = Date.parse(r.created_at);
+      return !Number.isNaN(createdMs) && nowMs - createdMs < threshold;
+    });
+    if (hasRecentNudge) continue;
 
     const days = Math.floor(ageMs / DAY_MS);
     const projectName = nameById.get(row.project_id) ?? row.project_id;
@@ -104,8 +113,13 @@ function tickAutomations(nowIso: string): void {
   }
   for (const a of due) {
     try {
-      // Fire-and-forget — startRun spawns its own async loop.
-      void startAutomationRun(a.id, "schedule");
+      // Fire-and-forget — startRun spawns its own async loop. The catch
+      // handles async rejections (e.g. automation with 0 steps).
+      void startAutomationRun(a.id, "schedule").catch((err: Error) => {
+        process.stderr.write(
+          `[scheduler] startAutomationRun '${a.id}' rejected: ${err.message}\n`,
+        );
+      });
     } catch (err) {
       process.stderr.write(
         `[scheduler] startAutomationRun '${a.id}' failed: ${(err as Error).message}\n`,
@@ -159,6 +173,18 @@ function tickRecurringTasks(nowIso: string): void {
 }
 
 async function tick(): Promise<void> {
+  // Cron fires every minute whether or not the previous tick finished;
+  // overlapping ticks would process the same due reminders twice.
+  if (tickInFlight) return;
+  tickInFlight = true;
+  try {
+    await tickOnce();
+  } finally {
+    tickInFlight = false;
+  }
+}
+
+async function tickOnce(): Promise<void> {
   const nowMs = Date.now();
   lastTickAt = new Date(nowMs).toISOString();
 
