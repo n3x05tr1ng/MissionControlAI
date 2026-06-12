@@ -167,7 +167,9 @@ export async function startTask(taskId: string): Promise<StartTaskResult> {
         ev.result === "error" ? "Session ended with error" : undefined,
       );
     } else if (ev.type === "error") {
-      // Only treat as terminal if we haven't seen session.end yet.
+      // The runner attaches sessionId to error events; ignore errors that
+      // belong to other sessions of the same project.
+      if ((ev as { sessionId?: string }).sessionId !== sessionId) return;
       settled = true;
       finish(taskId, task.project_id, task.title, "error", ev.message);
     }

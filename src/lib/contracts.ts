@@ -240,7 +240,7 @@ export type AgentEvent =
       filesTouched: string[];
       ts: string;
     }
-  | { type: "error"; message: string; ts: string }
+  | { type: "error"; message: string; ts: string; sessionId?: string }
   | { type: "log"; level: "info" | "warn" | "error"; message: string; ts: string };
 
 export interface AgentProvider {

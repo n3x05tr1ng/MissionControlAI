@@ -16,14 +16,16 @@ export async function GET(req: Request): Promise<Response> {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      let closed = false;
+      // Separate flags: a dead enqueue must never prevent cleanup from running.
+      let enqueueDead = false;
+      let cleanedUp = false;
 
       const safeEnqueue = (chunk: string): void => {
-        if (closed) return;
+        if (enqueueDead || cleanedUp) return;
         try {
           controller.enqueue(encoder.encode(chunk));
         } catch {
-          closed = true;
+          enqueueDead = true;
         }
       };
 
@@ -41,8 +43,8 @@ export async function GET(req: Request): Promise<Response> {
       }, KEEPALIVE_MS);
 
       const cleanup = (): void => {
-        if (closed) return;
-        closed = true;
+        if (cleanedUp) return;
+        cleanedUp = true;
         clearInterval(keepalive);
         unsubscribe();
         try {

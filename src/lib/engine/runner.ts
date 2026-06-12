@@ -66,11 +66,7 @@ export function stopRun(sessionId: string): boolean {
     logError("stopRun.updateSession", err);
   }
   try {
-    publish(entry.projectId, {
-      type: "error",
-      message: "Stopped by user",
-      ts,
-    });
+    publish(entry.projectId, errorEvent(sessionId, "Stopped by user", ts));
     publish(entry.projectId, {
       type: "session.end",
       sessionId,
@@ -118,6 +114,13 @@ export function writeProjectState(
 
 function logError(scope: string, err: unknown): void {
   process.stderr.write(`[engine.${scope}] ${(err as Error).message}\n`);
+}
+
+// The "error" contract variant carries no sessionId; attach it as an extra
+// field so consumers (e.g. the task orchestrator) can attribute the error to
+// their own session instead of any session in the same project.
+function errorEvent(sessionId: string, message: string, ts: string): AgentEvent {
+  return { type: "error", message, ts, sessionId } as AgentEvent;
 }
 
 export async function startRun(
@@ -177,18 +180,19 @@ export async function startRun(
         signal: controller.signal,
       })) {
         if (controller.signal.aborted) break;
-        publish(projectId, ev);
+        publish(
+          projectId,
+          ev.type === "error" ? errorEvent(runId, ev.message, ev.ts) : ev,
+        );
         await handleEvent(projectId, project.path, runId, flags, ev);
         if (ev.type === "session.end") break;
       }
     } catch (err) {
       logError("runner", err);
-      const failEv: AgentEvent = {
-        type: "error",
-        message: (err as Error).message,
-        ts: new Date().toISOString(),
-      };
-      publish(projectId, failEv);
+      publish(
+        projectId,
+        errorEvent(runId, (err as Error).message, new Date().toISOString()),
+      );
       try {
         updateSession(runId, {
           ended_at: new Date().toISOString(),

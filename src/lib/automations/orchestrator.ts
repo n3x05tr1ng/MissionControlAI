@@ -267,6 +267,15 @@ async function runAgentStep(
     errorMessage = (err as Error).message;
   }
 
+  if (signal.aborted) {
+    // An aborted step must never be recorded as success with partial output.
+    return {
+      ok: false,
+      output: assistantOutput,
+      errorMessage: errorMessage || "Aborted",
+    };
+  }
+
   if (!sessionEnded && errored) {
     return { ok: false, output: assistantOutput, errorMessage };
   }
@@ -423,6 +432,10 @@ async function executeRun(runId: string, signal: AbortSignal): Promise<void> {
             agentOutput: result.output,
             endedAt: new Date().toISOString(),
           });
+          if (signal.aborted) {
+            // stopRun already marked the run as errored and published it.
+            return;
+          }
           const msg = result.errorMessage ?? "agent step failed";
           setRunStatus(runId, "error", {
             endedAt: new Date().toISOString(),
@@ -525,6 +538,10 @@ async function executeRun(runId: string, signal: AbortSignal): Promise<void> {
               agentOutput: result.output,
               endedAt: new Date().toISOString(),
             });
+            if (signal.aborted) {
+              // stopRun already marked the run as errored and published it.
+              return;
+            }
             const msg = result.errorMessage ?? "review step failed";
             setRunStatus(runId, "error", {
               endedAt: new Date().toISOString(),
@@ -643,6 +660,10 @@ async function executeRun(runId: string, signal: AbortSignal): Promise<void> {
               agentOutput: rerun.output,
               endedAt: new Date().toISOString(),
             });
+            if (signal.aborted) {
+              // stopRun already marked the run as errored and published it.
+              return;
+            }
             const msg = rerun.errorMessage ?? "rerun failed";
             setRunStatus(runId, "error", {
               endedAt: new Date().toISOString(),
