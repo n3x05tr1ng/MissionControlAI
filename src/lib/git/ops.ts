@@ -85,11 +85,32 @@ export interface GitCheckoutResult {
   branch: string;
 }
 
+// Mirrors the core `git check-ref-format --branch` rules; rejecting a leading
+// "-" prevents branch names from being parsed as git options.
+function assertValidBranchName(name: string): void {
+  const hasInvalidChars = /[\s~^:?*[\\\x00-\x1f\x7f]/.test(name);
+  if (
+    !name ||
+    name.startsWith("-") ||
+    name.startsWith("/") ||
+    name.endsWith("/") ||
+    name.endsWith(".") ||
+    name.endsWith(".lock") ||
+    name.includes("..") ||
+    name.includes("@{") ||
+    name.includes("//") ||
+    hasInvalidChars
+  ) {
+    throw new Error(`Invalid branch name: ${JSON.stringify(name)}`);
+  }
+}
+
 export async function gitCheckout(
   projectPath: string,
   branch: string,
 ): Promise<GitCheckoutResult> {
   const git = client(projectPath);
+  assertValidBranchName(branch);
   await git.checkout(branch);
   return { ok: true, branch };
 }
@@ -99,6 +120,7 @@ export async function gitCreateBranch(
   name: string,
 ): Promise<GitCheckoutResult> {
   const git = client(projectPath);
+  assertValidBranchName(name);
   await git.checkout(["-b", name]);
   return { ok: true, branch: name };
 }
@@ -114,7 +136,8 @@ export async function gitStage(
 ): Promise<GitStageResult> {
   const git = client(projectPath);
   if (files.length === 0) return { ok: true, staged: 0 };
-  await git.add(files);
+  // `--` keeps paths starting with "-" from being parsed as options
+  await git.add(["--", ...files]);
   // ["."] means "all"; report best-effort count via post-status
   if (files.length === 1 && files[0] === ".") {
     const s = await git.status();
