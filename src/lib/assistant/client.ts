@@ -11,6 +11,9 @@ export type ChatEvent =
   | { kind: "text"; text: string }
   | { kind: "tool_use"; id: string; name: string; input: unknown }
   | { kind: "tool_result"; id: string; name: string; output: unknown }
+  // Turno assistant completo (texto + bloques tool_use) tal cual se envió a la
+  // API, para que el caller lo persista sin perder los tool_use.
+  | { kind: "assistant_turn"; blocks: Anthropic.ContentBlockParam[] }
   | { kind: "done" }
   | { kind: "error"; message: string };
 
@@ -51,6 +54,73 @@ function parseStoredContent(raw: string): ContentBlockParam[] {
   return [{ type: "text", text: raw }];
 }
 
+export function stringifyToolOutput(output: unknown): string {
+  if (typeof output === "string") return output;
+  try {
+    return JSON.stringify(output);
+  } catch {
+    return String(output);
+  }
+}
+
+// La API exige tool_result con forma { type, tool_use_id, content }. Las filas
+// antiguas guardaban { tool_use_id, name, output }; las convertimos aquí.
+function normalizeToolResult(block: PersistedBlock): ContentBlockParam | null {
+  const toolUseId =
+    typeof block.tool_use_id === "string" ? block.tool_use_id : null;
+  if (!toolUseId) return null;
+  const content =
+    typeof block.content === "string"
+      ? block.content
+      : stringifyToolOutput(block.output);
+  return { type: "tool_result", tool_use_id: toolUseId, content };
+}
+
+// Contrato de la API: cada tool_use de un mensaje assistant debe tener su
+// tool_result en el mensaje user inmediatamente posterior, y viceversa.
+// Los bloques huérfanos (p. ej. historiales cortados a media vuelta de
+// herramientas) se descartan para no invalidar la conversación entera.
+function dropOrphanToolBlocks(messages: MessageParam[]): MessageParam[] {
+  const result: MessageParam[] = [];
+
+  for (let i = 0; i < messages.length; i += 1) {
+    const msg = messages[i];
+    if (!Array.isArray(msg.content)) {
+      result.push(msg);
+      continue;
+    }
+
+    if (msg.role === "assistant") {
+      const next = messages[i + 1];
+      const resultIds = new Set<string>();
+      if (next?.role === "user" && Array.isArray(next.content)) {
+        for (const block of next.content) {
+          if (block.type === "tool_result") resultIds.add(block.tool_use_id);
+        }
+      }
+      const content = msg.content.filter(
+        (block) => block.type !== "tool_use" || resultIds.has(block.id),
+      );
+      if (content.length > 0) result.push({ role: "assistant", content });
+      continue;
+    }
+
+    const prev = result[result.length - 1];
+    const useIds = new Set<string>();
+    if (prev?.role === "assistant" && Array.isArray(prev.content)) {
+      for (const block of prev.content) {
+        if (block.type === "tool_use") useIds.add(block.id);
+      }
+    }
+    const content = msg.content.filter(
+      (block) => block.type !== "tool_result" || useIds.has(block.tool_use_id),
+    );
+    if (content.length > 0) result.push({ role: "user", content });
+  }
+
+  return result;
+}
+
 function historyToMessages(history: AssistantMessageRow[]): MessageParam[] {
   const messages: MessageParam[] = [];
   let pendingToolResults: ContentBlockParam[] = [];
@@ -67,35 +137,30 @@ function historyToMessages(history: AssistantMessageRow[]): MessageParam[] {
     if (row.role === "tool") {
       for (const block of blocks as unknown as PersistedBlock[]) {
         if (block.type === "tool_result") {
-          pendingToolResults.push(block as unknown as ContentBlockParam);
+          const normalized = normalizeToolResult(block);
+          if (normalized) pendingToolResults.push(normalized);
+          continue;
+        }
+        // Filas antiguas que guardaban el tool_use como role='tool': lo
+        // restauramos como turno assistant para que el tool_result que sigue
+        // tenga su pareja.
+        if (block.type === "tool_use") {
+          flushToolResults();
+          messages.push({
+            role: "assistant",
+            content: [block as unknown as ContentBlockParam],
+          });
         }
       }
       continue;
     }
 
-    if (row.role === "user") {
-      flushToolResults();
-      messages.push({ role: "user", content: blocks });
-      continue;
-    }
-
-    if (row.role === "assistant") {
-      flushToolResults();
-      messages.push({ role: "assistant", content: blocks });
-    }
+    flushToolResults();
+    messages.push({ role: row.role, content: blocks });
   }
 
   flushToolResults();
-  return messages;
-}
-
-function stringifyToolOutput(output: unknown): string {
-  if (typeof output === "string") return output;
-  try {
-    return JSON.stringify(output);
-  } catch {
-    return String(output);
-  }
+  return dropOrphanToolBlocks(messages);
 }
 
 export async function* chat(
@@ -131,7 +196,7 @@ export async function* chat(
     }
 
     const assistantBlocks: ContentBlockParam[] = [];
-    const toolResultBlocks: ContentBlockParam[] = [];
+    const toolUses: { id: string; name: string; input: unknown }[] = [];
 
     for (const block of response.content as ContentBlock[]) {
       if (block.type === "text") {
@@ -141,37 +206,36 @@ export async function* chat(
       }
 
       if (block.type === "tool_use") {
-        const useBlock = block;
         yield {
           kind: "tool_use",
-          id: useBlock.id,
-          name: useBlock.name,
-          input: useBlock.input,
+          id: block.id,
+          name: block.name,
+          input: block.input,
         };
         assistantBlocks.push({
           type: "tool_use",
-          id: useBlock.id,
-          name: useBlock.name,
-          input: useBlock.input,
+          id: block.id,
+          name: block.name,
+          input: block.input,
         });
-
-        const output = await executeTool(useBlock.name, useBlock.input);
-        yield {
-          kind: "tool_result",
-          id: useBlock.id,
-          name: useBlock.name,
-          output,
-        };
-        toolResultBlocks.push({
-          type: "tool_result",
-          tool_use_id: useBlock.id,
-          content: stringifyToolOutput(output),
-        });
+        toolUses.push({ id: block.id, name: block.name, input: block.input });
       }
     }
 
     if (assistantBlocks.length > 0) {
       messages.push({ role: "assistant", content: assistantBlocks });
+      yield { kind: "assistant_turn", blocks: assistantBlocks };
+    }
+
+    const toolResultBlocks: ContentBlockParam[] = [];
+    for (const use of toolUses) {
+      const output = await executeTool(use.name, use.input);
+      yield { kind: "tool_result", id: use.id, name: use.name, output };
+      toolResultBlocks.push({
+        type: "tool_result",
+        tool_use_id: use.id,
+        content: stringifyToolOutput(output),
+      });
     }
 
     if (response.stop_reason === "tool_use" && toolResultBlocks.length > 0) {

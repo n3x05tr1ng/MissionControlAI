@@ -167,6 +167,15 @@ const createReminderTool: ToolHandler = {
     if (!message) return { error: "message is required" };
     if (!dueAt) return { error: "dueAt is required" };
 
+    // El scheduler compara due_at lexicográficamente contra ISO UTC, así que
+    // normalizamos cualquier offset (p. ej. -04:00) a UTC antes de guardar.
+    const dueAtMs = Date.parse(dueAt);
+    if (Number.isNaN(dueAtMs)) {
+      return {
+        error: `dueAt must be a valid ISO-8601 timestamp, got: ${dueAt}`,
+      };
+    }
+
     const rawProjectId = input.projectId;
     const projectId =
       typeof rawProjectId === "string" && rawProjectId.length > 0
@@ -184,7 +193,7 @@ const createReminderTool: ToolHandler = {
       id: crypto.randomUUID(),
       project_id: projectId,
       message,
-      due_at: dueAt,
+      due_at: new Date(dueAtMs).toISOString(),
       kind: "manual",
       status: "pending",
       created_at: new Date().toISOString(),
