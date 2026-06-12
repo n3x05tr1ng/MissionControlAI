@@ -1,10 +1,14 @@
 import "server-only";
 
 import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import Database from "better-sqlite3";
 
-const DB_PATH = resolve(process.cwd(), "data", "hive.db");
+// HIVE_DATA_DIR lets desktop builds relocate the DB outside the app bundle.
+const DATA_DIR = process.env.HIVE_DATA_DIR
+  ? resolve(process.env.HIVE_DATA_DIR)
+  : resolve(process.cwd(), "data");
+const DB_PATH = join(DATA_DIR, "hive.db");
 
 let instance: Database.Database | null = null;
 

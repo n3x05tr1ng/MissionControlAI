@@ -12,7 +12,25 @@ import pty from "node-pty";
 import Database from "better-sqlite3";
 
 const PORT = Number(process.env.HIVE_TERMINAL_PORT || 3001);
-const DB_PATH = resolve(process.cwd(), "data", "hive.db");
+// Bind only to loopback: this server spawns shells and must never be
+// reachable from other machines.
+const HOST = "127.0.0.1";
+const DATA_DIR = process.env.HIVE_DATA_DIR
+  ? resolve(process.env.HIVE_DATA_DIR)
+  : resolve(process.cwd(), "data");
+const DB_PATH = join(DATA_DIR, "hive.db");
+
+// Anti CSWSH: browser pages must come from an allowed origin. Requests
+// without an Origin header (local non-browser clients) are allowed — the
+// hijacking vector is browser-only.
+const ALLOWED_ORIGINS = new Set([
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  ...(process.env.HIVE_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+]);
 
 let cachedClaudePath = null;
 function resolveClaudeCli() {
@@ -46,28 +64,32 @@ function claudeEnv(cwd) {
   };
 }
 
-let db;
-try {
-  db = new Database(DB_PATH, { readonly: true, fileMustExist: false });
-} catch (err) {
-  console.error("[term] failed to open sqlite:", err.message);
-  process.exit(0);
+// Lazy DB handle: on a clean install data/hive.db does not exist yet, so we
+// retry the open on every lookup instead of dying at startup.
+let db = null;
+function ensureDb() {
+  if (db) return db;
+  try {
+    db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
+  } catch (err) {
+    console.error("[term] sqlite unavailable:", err.message);
+    db = null;
+  }
+  return db;
 }
 
-const pathStmt = (() => {
-  try {
-    return db.prepare("SELECT path FROM projects WHERE id = ?");
-  } catch {
-    return null;
-  }
-})();
-
 function getProjectPath(id) {
-  if (!pathStmt) return null;
+  const conn = ensureDb();
+  if (!conn) return null;
   try {
-    const row = pathStmt.get(id);
+    const row = conn.prepare("SELECT path FROM projects WHERE id = ?").get(id);
     return row ? row.path : null;
-  } catch {
+  } catch (err) {
+    // Schema not ready or the file changed underneath us: drop the handle
+    // and let the next connection retry the open.
+    console.error("[term] sqlite query failed:", err.message);
+    try { conn.close(); } catch { /* noop */ }
+    db = null;
     return null;
   }
 }
@@ -94,11 +116,22 @@ http.on("error", (err) => {
   process.exit(0);
 });
 
-const wss = new WebSocketServer({ server: http, path: "/terminal" });
+const wss = new WebSocketServer({
+  server: http,
+  path: "/terminal",
+  verifyClient: (info) => {
+    const origin = info.origin || info.req.headers.origin;
+    if (!origin || ALLOWED_ORIGINS.has(origin)) return true;
+    console.error(`[term] rejected ws upgrade: origin not allowed (${origin})`);
+    return false;
+  },
+});
 
 wss.on("connection", (ws, req) => {
   const sessionId = ++sessionCounter;
   const startedAt = Date.now();
+  ws.isAlive = true;
+  ws.on("pong", () => { ws.isAlive = true; });
   const query = parseUrl(req.url || "", true).query;
   const projectId = typeof query.projectId === "string" ? query.projectId : "";
   const shell = typeof query.shell === "string" ? query.shell : "claude";
@@ -187,12 +220,28 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-http.listen(PORT, () => {
-  console.error(`[term] listening on http://localhost:${PORT} (ws /terminal, http /healthz)`);
+// Heartbeat: detect dead clients so their PTYs don't linger as zombies.
+const HEARTBEAT_MS = 30_000;
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) {
+      console.error("[term] terminating unresponsive client");
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    try { ws.ping(); } catch { /* noop */ }
+  }
+}, HEARTBEAT_MS);
+heartbeat.unref();
+
+http.listen(PORT, HOST, () => {
+  console.error(`[term] listening on http://${HOST}:${PORT} (ws /terminal, http /healthz)`);
 });
 
 function shutdown(sig) {
   console.error(`[term] ${sig} — shutting down (${sessions.size} ptys)`);
+  clearInterval(heartbeat);
   for (const t of sessions.values()) {
     try { t.kill(); } catch { /* noop */ }
   }

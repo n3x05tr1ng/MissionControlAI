@@ -6,7 +6,7 @@ const children = [];
 let firstFailureCode = 0;
 let shuttingDown = false;
 
-function startChild(label, cmd, args) {
+function startChild(label, cmd, args, { critical = true } = {}) {
   const child = spawn(cmd, args, {
     stdio: ["ignore", "pipe", "pipe"],
     env: process.env,
@@ -34,9 +34,10 @@ function startChild(label, cmd, args) {
   pipe(child.stderr, process.stderr);
 
   child.on("exit", (code, signal) => {
-    if (firstFailureCode === 0 && code && code !== 0) firstFailureCode = code;
     process.stderr.write(`${prefix}exited code=${code} sig=${signal ?? "-"}\n`);
-    if (!shuttingDown) shutdown(signal === "SIGINT" ? "SIGINT" : "child-exit");
+    if (shuttingDown || !critical) return;
+    if (firstFailureCode === 0 && code && code !== 0) firstFailureCode = code;
+    shutdown(signal === "SIGINT" ? "SIGINT" : "child-exit");
   });
 
   return child;
@@ -64,5 +65,23 @@ function shutdown(reason) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
+// The terminal server is optional: if it dies we restart it a few times and
+// otherwise keep Next running without the embedded terminal.
+const TERM_MAX_RESTARTS = 3;
+let termRestarts = 0;
+function startTerminalServer() {
+  const child = startChild("term", process.execPath, ["scripts/terminal-server.mjs"], { critical: false });
+  child.on("exit", () => {
+    if (shuttingDown) return;
+    if (termRestarts < TERM_MAX_RESTARTS) {
+      termRestarts += 1;
+      process.stderr.write(`[dev] terminal server exited — restarting (${termRestarts}/${TERM_MAX_RESTARTS}) in 2s\n`);
+      setTimeout(startTerminalServer, 2000).unref();
+    } else {
+      process.stderr.write("[dev] terminal server keeps exiting — continuing WITHOUT embedded terminal\n");
+    }
+  });
+}
+
 startChild("next", "npx", ["next", "dev"]);
-startChild("term", process.execPath, ["scripts/terminal-server.mjs"]);
+startTerminalServer();

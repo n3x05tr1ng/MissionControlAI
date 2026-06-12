@@ -35,7 +35,8 @@ export function EmbeddedTerminal({ projectId, shell: initialShell }: Props) {
   const wsUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
     const host = window.location.hostname || "localhost";
-    return `ws://${host}:3001/terminal?projectId=${encodeURIComponent(projectId)}&shell=${encodeURIComponent(shell)}`;
+    const port = process.env.NEXT_PUBLIC_HIVE_TERMINAL_PORT || "3001";
+    return `ws://${host}:${port}/terminal?projectId=${encodeURIComponent(projectId)}&shell=${encodeURIComponent(shell)}`;
   }, [projectId, shell]);
 
   const reconnect = useCallback(() => {
