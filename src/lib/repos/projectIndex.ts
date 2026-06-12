@@ -46,9 +46,29 @@ function getListStmt(): Statement {
   return listStmt;
 }
 
+// Compara los campos con significado real; indexed_at cambia en cada lectura
+// y no debe contar como "cambio" (si contara, cada render del dashboard
+// publicaría un evento y el SSE entraría en bucle de refresco).
+function rowDataChanged(
+  existing: ProjectIndexRow | null,
+  row: ProjectIndexRow,
+): boolean {
+  if (!existing) return true;
+  return (
+    existing.status !== row.status ||
+    existing.next_step !== row.next_step ||
+    existing.last_session_at !== row.last_session_at ||
+    existing.git_branch !== row.git_branch ||
+    existing.git_dirty !== row.git_dirty
+  );
+}
+
 export function upsertProjectIndex(row: ProjectIndexRow): void {
+  const changed = rowDataChanged(getProjectIndex(row.project_id), row);
   getUpsertStmt().run(row);
-  projectBus.publish({ type: "project_index.updated", row });
+  if (changed) {
+    projectBus.publish({ type: "project_index.updated", row });
+  }
 }
 
 export function getProjectIndex(projectId: string): ProjectIndexRow | null {

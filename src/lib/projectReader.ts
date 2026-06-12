@@ -13,6 +13,14 @@ import { getGitInfo } from "@/lib/gitInfo";
 import { readAndParseHandoff } from "@/lib/handoffParser";
 import { upsertProjectIndex } from "@/lib/repos/projectIndex";
 
+const VALID_STATUSES = new Set<string>([
+  "idle",
+  "running",
+  "needs-input",
+  "blocked",
+  "done",
+]);
+
 export function readProjectState(
   projectPath: string,
   projectId: string,
@@ -35,11 +43,37 @@ export function readProjectState(
     return fallback;
   }
 
+  let parsed: Partial<ProjectState>;
   try {
-    return JSON.parse(raw) as ProjectState;
+    parsed = JSON.parse(raw) as Partial<ProjectState>;
   } catch {
     return fallback;
   }
+
+  // JSON válido pero sin la forma mínima (p.ej. sin status) rompería el
+  // upsert a sqlite con bindings undefined — cae al fallback.
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    typeof parsed.status !== "string" ||
+    !VALID_STATUSES.has(parsed.status)
+  ) {
+    return fallback;
+  }
+
+  return {
+    projectId: parsed.projectId ?? fallback.projectId,
+    status: parsed.status,
+    nextStep: parsed.nextStep ?? fallback.nextStep,
+    blockers: Array.isArray(parsed.blockers)
+      ? parsed.blockers
+      : fallback.blockers,
+    openQuestions: Array.isArray(parsed.openQuestions)
+      ? parsed.openQuestions
+      : fallback.openQuestions,
+    lastSession: parsed.lastSession ?? fallback.lastSession,
+    updatedAt: parsed.updatedAt ?? fallback.updatedAt,
+  };
 }
 
 export async function readProjectSnapshot(
@@ -53,7 +87,7 @@ export async function readProjectSnapshot(
 
   upsertProjectIndex({
     project_id: cfg.id,
-    status: state.status,
+    status: state.status ?? "idle",
     next_step: state.nextStep || null,
     last_session_at: state.lastSession?.endedAt ?? null,
     git_branch: git?.branch ?? null,
