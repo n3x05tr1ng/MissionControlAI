@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities for the Hive desktop main window. The Node sidecars are spawned with std::process from src/lib.rs (full lifecycle control), so no shell-execute permission is granted. process:allow-exit/restart give clean shutdown so neither Node child outlives the window.",
+  "local": true,
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "process:allow-exit",
+    "process:allow-restart"
+  ]
+}

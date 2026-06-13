@@ -1,0 +1,18 @@
+{
+  "name": "hive-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hive (MissionControlAI) desktop — Tauri v2 shell running the Next standalone server + the embedded-terminal server as Node sidecars.",
+  "scripts": {
+    "//": "Build the macOS app/.dmg. `assemble` stages the Next standalone runtime, the terminal runtime, and the bundled node binary into src-tauri/ before `tauri build`. See scripts/build-desktop.sh and README.md.",
+    "assemble": "bash scripts/build-desktop.sh assemble",
+    "build": "bash scripts/build-desktop.sh build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

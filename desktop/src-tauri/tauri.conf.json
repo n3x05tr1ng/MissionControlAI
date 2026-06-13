@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Hive",
+  "version": "0.1.0",
+  "identifier": "com.hive.desktop",
+
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../frontend"
+  },
+
+  "app": {
+    "windows": [
+      {
+        "title": "Hive",
+        "label": "main",
+        "width": 1280,
+        "height": 832,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: asset: https://asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*"
+    }
+  },
+
+  "plugins": {
+    "shell": {
+      "open": false
+    }
+  },
+
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "DeveloperTool",
+    "shortDescription": "Local control center for your Claude Code projects.",
+    "longDescription": "Hive runs the MissionControlAI dashboard and its embedded-terminal server entirely on your machine as two Node sidecars supervised by a Tauri shell. Your projects database (SQLite) lives under your macOS app-data dir; the terminal spawns Claude Code in your real project directories.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/hive-node"],
+    "resources": ["next-runtime/**/*", "terminal-runtime/**/*"],
+    "copyright": "Copyright © Hive build team. MIT licensed.",
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "dmg": {
+        "appPosition": { "x": 180, "y": 220 },
+        "applicationFolderPosition": { "x": 480, "y": 220 },
+        "windowSize": { "width": 660, "height": 420 }
+      }
+    }
+  }
+}

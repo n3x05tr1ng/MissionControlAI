@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hive</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body {
+        margin: 0; height: 100%;
+        background: #0c0a09; color: #fafaf9;
+        font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+      }
+      .wrap {
+        height: 100%; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 22px;
+      }
+      .mark {
+        width: 64px; height: 64px; border-radius: 16px;
+        background: radial-gradient(120% 120% at 30% 20%, #ffce6b, #ffb000 55%, #b97900);
+        box-shadow: 0 0 40px rgba(255, 176, 0, 0.35);
+        display: grid; place-items: center;
+        font-weight: 800; font-size: 30px; color: #1c1206;
+      }
+      .title { font-size: 15px; letter-spacing: 0.02em; color: #d6d3d1; }
+      .spinner {
+        width: 22px; height: 22px; border-radius: 50%;
+        border: 2px solid rgba(255, 176, 0, 0.25); border-top-color: #ffb000;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="mark">H</div>
+      <div class="spinner"></div>
+      <div class="title">Starting Hive…</div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,48 @@
+[package]
+name = "hive-desktop"
+version = "0.1.0"
+description = "Hive (MissionControlAI) desktop shell — Tauri v2 wrapping the Next standalone server + the embedded-terminal server as Node sidecars."
+authors = ["Hive build team"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "hive_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+# Core Tauri runtime + the two plugins the shell needs:
+#   - shell:   spawn/supervise the bundled `node` sidecar (Next server + terminal).
+#   - process: clean exit so the Node children never outlive the window.
+tauri = { version = "2.0", features = [] }
+tauri-plugin-shell = "2.0"
+tauri-plugin-process = "2.0"
+
+serde = { version = "1", features = ["derive"] }
+# Required by the `tauri::generate_context!` macro (it expands to serde_json paths).
+serde_json = "1"
+log = "0.4"
+
+# Pick free localhost ports for the Next sidecar (the terminal server uses a
+# fixed port baked into the frontend at build time).
+[dependencies.portpicker]
+version = "0.1"
+
+# SIGTERM the Node sidecars on teardown so they (and the PTYs the terminal server
+# owns) shut down gracefully before the hard kill — see stop_sidecars in lib.rs.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

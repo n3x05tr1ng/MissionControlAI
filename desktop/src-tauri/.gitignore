@@ -1,0 +1,7 @@
+# Build artifacts assembled by scripts/build-desktop.sh — never committed.
+/target
+/next-runtime
+/terminal-runtime
+/binaries/*
+!/binaries/.gitkeep
+/gen
