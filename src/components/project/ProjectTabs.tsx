@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { InlineFileEditor } from "@/components/editors/InlineFileEditor";
 import { GitPanel } from "@/components/git/GitPanel";
@@ -60,50 +60,98 @@ export function ProjectTabs({
 }: Props) {
   const storageKey = `hive:project-tab:${projectId}`;
   const [active, setActive] = useState<TabKey>("overview");
+  const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map());
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
     const saved = window.localStorage.getItem(storageKey);
-    if (isTabKey(saved)) setActive(saved);
+    if (!isTabKey(saved)) return;
+    // Deferred restore: avoids a synchronous setState inside the effect body
+    // (react-hooks/set-state-in-effect) while still applying the saved tab.
+    const frame = requestAnimationFrame(() => setActive(saved));
+    return () => cancelAnimationFrame(frame);
   }, [storageKey]);
 
   const handleSelect = useCallback(
     (key: TabKey) => {
       setActive(key);
-      if (typeof window !== "undefined") {
+      try {
         window.localStorage.setItem(storageKey, key);
+      } catch {
+        // ignore quota/permission errors
       }
     },
     [storageKey],
   );
 
+  // Tabs ARIA pattern: roving tabindex + arrow-key navigation
+  // (selection follows focus).
+  const onTablistKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      const idx = TABS.findIndex((t) => t.key === active);
+      let next: number | null = null;
+      if (e.key === "ArrowRight") next = (idx + 1) % TABS.length;
+      else if (e.key === "ArrowLeft") next = (idx - 1 + TABS.length) % TABS.length;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = TABS.length - 1;
+      if (next === null) return;
+      e.preventDefault();
+      const key = TABS[next].key;
+      handleSelect(key);
+      tabRefs.current.get(key)?.focus();
+    },
+    [active, handleSelect],
+  );
+
   return (
     <div className="flex h-full flex-col">
-      <nav className="sticky top-0 z-10 flex shrink-0 items-center gap-1 border-b border-hive-border bg-hive-panel px-2">
+      <div
+        role="tablist"
+        aria-label="Project sections"
+        onKeyDown={onTablistKeyDown}
+        className="flex shrink-0 items-center gap-1 border-b border-border bg-surface-1/80 px-2"
+      >
         {TABS.map((tab) => {
           const isActive = active === tab.key;
           return (
             <button
               key={tab.key}
+              ref={(el) => {
+                if (el) tabRefs.current.set(tab.key, el);
+                else tabRefs.current.delete(tab.key);
+              }}
               type="button"
+              role="tab"
+              id={`project-tab-${tab.key}`}
+              aria-selected={isActive}
+              aria-controls={`project-panel-${tab.key}`}
+              tabIndex={isActive ? 0 : -1}
               onClick={() => handleSelect(tab.key)}
-              className={
-                "relative px-3 py-2 font-mono text-[11px] uppercase tracking-widest transition-colors " +
-                (isActive
-                  ? "text-hive-amber"
-                  : "text-hive-muted hover:text-hive-text")
-              }
+              className={`relative rounded-t-md px-3 py-2.5 text-[13px] font-medium ${
+                isActive
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {tab.label}
               {isActive ? (
-                <span className="absolute bottom-0 left-2 right-2 h-px bg-hive-amber" />
+                <span
+                  className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary"
+                  aria-hidden="true"
+                />
               ) : null}
             </button>
           );
         })}
-      </nav>
+      </div>
 
-      <div className="flex-1 min-h-0 overflow-auto p-4">
+      <div
+        key={active}
+        role="tabpanel"
+        id={`project-panel-${active}`}
+        aria-labelledby={`project-tab-${active}`}
+        tabIndex={0}
+        className="animate-enter min-h-0 flex-1 overflow-auto p-4"
+      >
         {active === "overview" ? (
           <OverviewPanel
             projectId={projectId}
@@ -117,9 +165,9 @@ export function ProjectTabs({
         ) : null}
         {active === "handoff" ? (
           <section>
-            <header className="mb-2 flex items-center justify-between gap-2">
-              <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-                [ HANDOFF ]
+            <header className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-[13px] font-medium text-foreground">
+                Handoff
               </h2>
               <InlineFileEditor projectId={projectId} kind="handoff" />
             </header>
@@ -134,6 +182,62 @@ export function ProjectTabs({
     </div>
   );
 }
+
+/* ------------------------- collapsible section --------------------------- */
+
+type CollapsibleProps = {
+  title: string;
+  defaultOpen?: boolean;
+  /** Small badges shown next to the title (visible even when collapsed). */
+  meta?: ReactNode;
+  /** Right-aligned actions; clicks there never toggle the section. */
+  actions?: ReactNode;
+  children: ReactNode;
+};
+
+function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  meta,
+  actions,
+  children,
+}: CollapsibleProps) {
+  return (
+    <details className="group" open={defaultOpen}>
+      <summary className="flex cursor-pointer select-none list-none items-center gap-2 rounded-md px-1 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className="h-3.5 w-3.5 shrink-0 text-faint transition-transform group-open:rotate-90"
+        >
+          <path d="M6 4l4 4-4 4" />
+        </svg>
+        <span>{title}</span>
+        {meta}
+        {actions ? (
+          <span
+            className="ml-auto"
+            // Keep action clicks from toggling the <details>.
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            {actions}
+          </span>
+        ) : null}
+      </summary>
+      <div className="mt-2">{children}</div>
+    </details>
+  );
+}
+
+/* ------------------------------ overview --------------------------------- */
 
 type OverviewProps = {
   projectId: string;
@@ -155,41 +259,54 @@ function OverviewPanel({
   activitySlot,
 }: OverviewProps) {
   const { state, git } = snapshot;
+  const blockerCount = state.blockers.length;
+  const questionCount = state.openQuestions.length;
 
   return (
     <div className="flex flex-col gap-4">
+      {/* The run panel is the protagonist of the overview. */}
       <RunPanel
         projectId={projectId}
         models={engineModels}
         defaultModel={defaultEngineModel}
       />
 
-      {activitySlot}
-
-      <section className="border border-hive-border bg-hive-panel">
-        <header className="flex items-center justify-between gap-2 border-b border-hive-border px-4 py-2">
-          <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-            [ STATE ]
-          </h2>
-          <InlineFileEditor projectId={projectId} kind="state" />
-        </header>
-        <div className="divide-y divide-hive-border">
+      <CollapsibleSection
+        title="Current state"
+        defaultOpen
+        meta={
+          <>
+            {blockerCount > 0 ? (
+              <span className="rounded-full bg-destructive-soft px-2 py-0.5 font-mono text-[11px] text-destructive">
+                {blockerCount} blocker{blockerCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+            {questionCount > 0 ? (
+              <span className="rounded-full bg-info-soft px-2 py-0.5 font-mono text-[11px] text-info">
+                {questionCount} question{questionCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+          </>
+        }
+        actions={<InlineFileEditor projectId={projectId} kind="state" />}
+      >
+        <div className="divide-y divide-border rounded-lg border border-border bg-surface-1 shadow-bevel">
           <div className="p-4">
-            <h3 className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+            <h3 className="text-[12px] font-medium text-muted-foreground">
               Next step
             </h3>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-hive-text/90">
+            <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-foreground/90">
               {state.nextStep?.trim() || "—"}
             </p>
           </div>
           <div className="p-4">
-            <h3 className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+            <h3 className="text-[12px] font-medium text-muted-foreground">
               Blockers
             </h3>
-            {state.blockers.length === 0 ? (
-              <p className="mt-1 text-sm text-hive-muted">—</p>
+            {blockerCount === 0 ? (
+              <p className="mt-1 text-[13px] text-faint">None</p>
             ) : (
-              <ul className="mt-1 list-disc pl-4 text-sm text-hive-text/90">
+              <ul className="mt-1 list-disc pl-4 text-[13px] leading-relaxed text-foreground/90">
                 {state.blockers.map((b, i) => (
                   <li key={`${i}-${b}`}>{b}</li>
                 ))}
@@ -197,13 +314,13 @@ function OverviewPanel({
             )}
           </div>
           <div className="p-4">
-            <h3 className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+            <h3 className="text-[12px] font-medium text-muted-foreground">
               Open questions
             </h3>
-            {state.openQuestions.length === 0 ? (
-              <p className="mt-1 text-sm text-hive-muted">—</p>
+            {questionCount === 0 ? (
+              <p className="mt-1 text-[13px] text-faint">None</p>
             ) : (
-              <ul className="mt-1 list-disc pl-4 text-sm text-hive-text/90">
+              <ul className="mt-1 list-disc pl-4 text-[13px] leading-relaxed text-foreground/90">
                 {state.openQuestions.map((q, i) => (
                   <li key={`${i}-${q}`}>{q}</li>
                 ))}
@@ -211,15 +328,22 @@ function OverviewPanel({
             )}
           </div>
         </div>
-      </section>
+      </CollapsibleSection>
 
-      <GitStatusView git={git} />
+      <CollapsibleSection title="Repository">
+        <GitStatusView git={git} />
+      </CollapsibleSection>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RemindersPanel reminders={reminders} />
-        <RecentActivityPanel notifications={notifications} />
-      </div>
+      <CollapsibleSection title="Activity & stats">
+        {activitySlot}
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Reminders & recent activity">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <RemindersPanel reminders={reminders} />
+          <RecentActivityPanel notifications={notifications} />
+        </div>
+      </CollapsibleSection>
     </div>
   );
 }
-

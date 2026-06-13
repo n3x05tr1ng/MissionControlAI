@@ -1,15 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { PromptComposer } from "@/components/PromptComposer";
 import { confirm } from "@/components/ui/ConfirmDialog";
 import { notify } from "@/lib/ui/notify";
 import type { AppConfigModel, LaunchFlags } from "@/lib/contracts";
-
-type EngineProviderId = "claude-cli" | "claude-code";
 
 type Props = {
   projectId: string;
@@ -22,34 +20,16 @@ type ErrorState =
   | { kind: "missingKey" }
   | { kind: "generic"; message: string };
 
+/** The run API answers 400 both for a missing Anthropic key and for malformed
+ *  bodies — only the key case deserves the "configure your key" banner. */
+function isMissingKeyMessage(message: string): boolean {
+  return message.includes("ANTHROPIC_API_KEY");
+}
+
 export function RunPanel({ projectId, models, defaultModel }: Props) {
   const [isRunning, setIsRunning] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [error, setError] = useState<ErrorState>({ kind: "none" });
-  const [engineProvider, setEngineProvider] = useState<EngineProviderId>("claude-cli");
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/settings", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { engine_provider?: EngineProviderId };
-        if (
-          !cancelled &&
-          (data.engine_provider === "claude-cli" ||
-            data.engine_provider === "claude-code")
-        ) {
-          setEngineProvider(data.engine_provider);
-        }
-      } catch {
-        // ignore — keep default
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   async function handleLaunch(flags: LaunchFlags) {
     if (isRunning || isPosting) return;
@@ -65,11 +45,6 @@ export function RunPanel({ projectId, models, defaultModel }: Props) {
 
       if (res.ok) return;
 
-      if (res.status === 400) {
-        setError({ kind: "missingKey" });
-        return;
-      }
-
       let msg = `Run failed (${res.status})`;
       try {
         const data = (await res.json()) as { error?: string };
@@ -77,6 +52,12 @@ export function RunPanel({ projectId, models, defaultModel }: Props) {
       } catch {
         // ignore
       }
+
+      if (res.status === 400 && isMissingKeyMessage(msg)) {
+        setError({ kind: "missingKey" });
+        return;
+      }
+
       setError({ kind: "generic", message: msg });
       notify.error(msg);
     } catch (err) {
@@ -93,8 +74,7 @@ export function RunPanel({ projectId, models, defaultModel }: Props) {
   async function handleStop() {
     const ok = await confirm({
       title: "Stop run?",
-      message:
-        "The agent will be aborted. The session row is marked error.",
+      message: "The agent will be aborted. The session row is marked error.",
       danger: true,
       confirmLabel: "Stop",
     });
@@ -123,7 +103,6 @@ export function RunPanel({ projectId, models, defaultModel }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <PromptComposer
-        projectId={projectId}
         models={models}
         defaultModel={defaultModel}
         onLaunch={handleLaunch}
@@ -135,32 +114,66 @@ export function RunPanel({ projectId, models, defaultModel }: Props) {
           <button
             type="button"
             onClick={handleStop}
-            className="border border-red-500/60 bg-red-500/10 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-red-300 hover:bg-red-500/20"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive-soft px-3 text-[13px] font-medium text-destructive hover:bg-destructive/25"
           >
-            ■ STOP run
+            <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3" aria-hidden="true">
+              <rect x="3" y="3" width="10" height="10" rx="1.5" />
+            </svg>
+            Stop run
           </button>
         </div>
       ) : null}
 
-      {error.kind === "missingKey" && engineProvider === "claude-code" ? (
-        <div className="border border-hive-red/60 bg-hive-red/10 px-3 py-2 font-mono text-xs text-hive-red">
-          <Link href="/settings" className="underline hover:text-hive-amber">
-            Configure your Anthropic API key first
-          </Link>
+      {error.kind === "missingKey" ? (
+        <div
+          role="alert"
+          className="animate-enter flex items-center gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2.5 text-[13px] text-warning"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4 shrink-0"
+            aria-hidden="true"
+          >
+            <circle cx="5.5" cy="10.5" r="3" />
+            <path d="M8 8.5 13.5 3M11 5.5l2 2" />
+          </svg>
+          <span>
+            An Anthropic API key is required to launch runs.{" "}
+            <Link
+              href="/settings"
+              className="font-medium underline underline-offset-2 hover:text-foreground"
+            >
+              Add it in Settings
+            </Link>
+          </span>
         </div>
       ) : null}
 
       {error.kind === "generic" ? (
-        <div className="border border-hive-red/60 bg-hive-red/10 px-3 py-2 font-mono text-xs text-hive-red">
+        <div
+          role="alert"
+          className="animate-enter rounded-md border border-destructive/40 bg-destructive-soft px-3 py-2.5 text-[13px] text-destructive"
+        >
           {error.message}
         </div>
       ) : null}
 
-      <section className="border border-hive-border bg-hive-panel">
-        <header className="border-b border-hive-border px-4 py-2">
-          <h3 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-            [ ENGINE — claude-code ]
+      <section className="rounded-lg border border-border bg-surface-1 shadow-bevel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h3 className="text-[12px] font-medium text-muted-foreground">
+            Engine activity
           </h3>
+          {isRunning ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-2 py-0.5 font-mono text-[11px] text-primary">
+              <span className="ai-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+              running
+            </span>
+          ) : null}
         </header>
         <div className="p-4">
           <ActivityFeed projectId={projectId} onRunStateChange={setIsRunning} />

@@ -68,6 +68,14 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
   return data as T;
 }
 
+const secondaryBtn =
+  "inline-flex h-7 items-center rounded-md border border-border bg-surface-2 px-2.5 text-[12px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50";
+
+const primaryBtn =
+  "inline-flex h-8 items-center rounded-md bg-primary px-3.5 text-[13px] font-medium text-primary-foreground hover:bg-primary-hover hover:shadow-glow disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none";
+
+const sectionLabel = "text-[11px] font-medium text-faint";
+
 export function GitPanel({ projectId, initialBranch }: Props) {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [branches, setBranches] = useState<BranchesData | null>(null);
@@ -113,7 +121,12 @@ export function GitPanel({ projectId, initialBranch }: Props) {
   }, [projectId]);
 
   useEffect(() => {
-    void refresh();
+    // Deferred initial load: keeps the effect body free of synchronous state
+    // updates (react-hooks/set-state-in-effect).
+    const t = window.setTimeout(() => {
+      void refresh();
+    }, 0);
+    return () => window.clearTimeout(t);
   }, [refresh]);
 
   const onCheckout = useCallback(
@@ -122,7 +135,7 @@ export function GitPanel({ projectId, initialBranch }: Props) {
       const dirty = (status?.files.length ?? 0) > 0;
       if (dirty) {
         const ok = await confirm({
-          title: "SWITCH BRANCH WITH UNCOMMITTED CHANGES",
+          title: "Switch branch with uncommitted changes?",
           message:
             "Your working tree has changes. Switching could fail or move them. Continue?",
           confirmLabel: "Switch",
@@ -284,30 +297,35 @@ export function GitPanel({ projectId, initialBranch }: Props) {
     : false;
 
   return (
-    <section className="border border-hive-border bg-hive-panel">
-      <header className="flex items-center justify-between border-b border-hive-border px-4 py-2">
-        <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-          [ GIT ]
-        </h2>
-        {status ? (
-          <span className="font-mono text-[10px] text-hive-muted">
-            {status.ahead > 0 ? `↑${status.ahead}` : null}
-            {status.behind > 0 ? ` ↓${status.behind}` : null}
+    <section className="rounded-lg border border-border bg-surface-1 shadow-bevel">
+      <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+        <h2 className="text-[12px] font-medium text-muted-foreground">Git</h2>
+        {status && (status.ahead > 0 || status.behind > 0) ? (
+          <span className="flex items-center gap-1.5">
+            {status.ahead > 0 ? (
+              <span className="rounded-full bg-success-soft px-2 py-0.5 font-mono text-[11px] text-success">
+                ↑{status.ahead}
+              </span>
+            ) : null}
+            {status.behind > 0 ? (
+              <span className="rounded-full bg-warning-soft px-2 py-0.5 font-mono text-[11px] text-warning">
+                ↓{status.behind}
+              </span>
+            ) : null}
           </span>
         ) : null}
       </header>
 
-      <div className="divide-y divide-hive-border">
+      <div className="divide-y divide-border">
         {/* Branch row */}
-        <div className="p-4 flex flex-wrap items-center gap-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            branch
-          </span>
+        <div className="flex flex-wrap items-center gap-3 p-4">
+          <span className={sectionLabel}>Branch</span>
           <select
-            className="border border-hive-border bg-hive-panel px-2 py-1 font-mono text-xs text-hive-text"
+            className="h-8 rounded-md border border-input bg-surface-2 px-2 font-mono text-[12px] text-foreground focus:outline-none disabled:opacity-50"
             value={currentBranch}
             onChange={(e) => onCheckout(e.target.value)}
             disabled={busy !== null || !branches}
+            aria-label="Switch branch"
           >
             {branches?.locals.length ? (
               branches.locals.map((b) => (
@@ -323,28 +341,28 @@ export function GitPanel({ projectId, initialBranch }: Props) {
             type="button"
             onClick={() => setNewBranchOpen(true)}
             disabled={busy !== null}
-            className="border border-hive-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber"
+            className={secondaryBtn}
           >
-            + branch
+            New branch
           </button>
           <button
             type="button"
             onClick={() => void refresh()}
             disabled={busy !== null}
-            className="ml-auto border border-hive-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-text"
+            className={`ml-auto ${secondaryBtn}`}
           >
-            refresh
+            Refresh
           </button>
         </div>
 
         {newBranchOpen ? (
-          <div className="p-4 flex items-center gap-2">
+          <div className="animate-enter flex items-center gap-2 p-4">
             <input
               autoFocus
               value={newBranchName}
               onChange={(e) => setNewBranchName(e.target.value)}
-              placeholder="branch name"
-              className="flex-1 border border-hive-border bg-black/30 px-2 py-1 font-mono text-xs text-hive-text"
+              placeholder="Branch name"
+              className="h-8 flex-1 rounded-md border border-input bg-background/60 px-2.5 font-mono text-[12px] text-foreground placeholder:text-faint focus:border-primary/50 focus:outline-none"
               onKeyDown={(e) => {
                 if (e.key === "Enter") void onCreateBranch();
                 if (e.key === "Escape") {
@@ -357,9 +375,9 @@ export function GitPanel({ projectId, initialBranch }: Props) {
               type="button"
               onClick={() => void onCreateBranch()}
               disabled={busy !== null || !newBranchName.trim()}
-              className="border border-hive-amber bg-hive-amber/10 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20 disabled:opacity-50"
+              className={primaryBtn}
             >
-              create
+              Create
             </button>
             <button
               type="button"
@@ -367,9 +385,9 @@ export function GitPanel({ projectId, initialBranch }: Props) {
                 setNewBranchOpen(false);
                 setNewBranchName("");
               }}
-              className="border border-hive-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-text"
+              className={secondaryBtn}
             >
-              cancel
+              Cancel
             </button>
           </div>
         ) : null}
@@ -377,9 +395,13 @@ export function GitPanel({ projectId, initialBranch }: Props) {
         {/* Status section */}
         <div className="p-4">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              status
-              {status ? ` — ${status.files.length} changes` : ""}
+            <span className={sectionLabel}>
+              Changes
+              {status ? (
+                <span className="ml-1.5 rounded-full bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                  {status.files.length}
+                </span>
+              ) : null}
             </span>
             {status && status.files.length > 0 ? (
               <div className="flex items-center gap-2">
@@ -387,9 +409,9 @@ export function GitPanel({ projectId, initialBranch }: Props) {
                   type="button"
                   onClick={() => stageFiles(["."])}
                   disabled={busy !== null || allFilesStaged}
-                  className="border border-hive-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber disabled:opacity-40"
+                  className={secondaryBtn}
                 >
-                  stage all
+                  Stage all
                 </button>
                 <button
                   type="button"
@@ -401,26 +423,27 @@ export function GitPanel({ projectId, initialBranch }: Props) {
                   disabled={
                     busy !== null || !status.files.some((f) => f.staged)
                   }
-                  className="border border-hive-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-text disabled:opacity-40"
+                  className={secondaryBtn}
                 >
-                  unstage all
+                  Unstage all
                 </button>
               </div>
             ) : null}
           </div>
 
           {!status ? (
-            <p className="mt-2 font-mono text-xs text-hive-muted">loading…</p>
+            <p className="mt-2 text-[13px] text-muted-foreground">Loading…</p>
           ) : status.files.length === 0 ? (
-            <p className="mt-2 font-mono text-xs text-hive-muted">
-              working tree clean
+            <p className="mt-2 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
+              Working tree clean
             </p>
           ) : (
-            <ul className="mt-2 divide-y divide-hive-border/50 border border-hive-border/50">
+            <ul className="mt-3 divide-y divide-border overflow-hidden rounded-md border border-border">
               {status.files.map((f) => (
                 <li
                   key={f.path}
-                  className="flex items-center gap-2 px-2 py-1 font-mono text-xs"
+                  className="flex items-center gap-2.5 px-2.5 py-1.5 font-mono text-[12px] hover:bg-surface-2"
                 >
                   <input
                     type="checkbox"
@@ -433,15 +456,16 @@ export function GitPanel({ projectId, initialBranch }: Props) {
                       }
                     }}
                     disabled={busy !== null}
-                    aria-label={`stage ${f.path}`}
+                    className="accent-primary"
+                    aria-label={`Stage ${f.path}`}
                   />
-                  <code className="text-hive-amber w-10 shrink-0">
+                  <code className="w-8 shrink-0 text-primary">
                     {f.index === " " ? "·" : f.index}
                     {f.working === " " ? "·" : f.working}
                   </code>
-                  <code className="truncate text-hive-text/90">{f.path}</code>
+                  <code className="truncate text-foreground/90">{f.path}</code>
                   {f.isUntracked ? (
-                    <span className="ml-auto text-[10px] uppercase text-hive-muted">
+                    <span className="ml-auto rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info">
                       new
                     </span>
                   ) : null}
@@ -452,93 +476,89 @@ export function GitPanel({ projectId, initialBranch }: Props) {
         </div>
 
         {/* Commit row */}
-        <div className="p-4 flex flex-col gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            commit
-          </span>
+        <div className="flex flex-col gap-2 p-4">
+          <span className={sectionLabel}>Commit</span>
           <textarea
             value={commitMsg}
             onChange={(e) => setCommitMsg(e.target.value)}
             placeholder="Commit message"
             rows={2}
-            className="w-full border border-hive-border bg-black/30 px-2 py-1 font-mono text-xs text-hive-text"
+            className="w-full rounded-md border border-input bg-background/60 px-2.5 py-2 font-mono text-[12px] text-foreground placeholder:text-faint focus:border-primary/50 focus:outline-none"
           />
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => void onCommit(false)}
               disabled={busy !== null || !commitMsg.trim()}
-              className="border border-hive-amber bg-hive-amber/10 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20 disabled:opacity-50"
+              className={primaryBtn}
             >
-              {busy === "commit" ? "committing…" : "commit"}
+              {busy === "commit" ? "Committing…" : "Commit"}
             </button>
             {hasRemote ? (
               <button
                 type="button"
                 onClick={() => void onCommit(true)}
                 disabled={busy !== null || !commitMsg.trim()}
-                className="border border-hive-amber bg-hive-amber/10 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20 disabled:opacity-50"
+                className="inline-flex h-8 items-center rounded-md border border-border bg-surface-2 px-3 text-[13px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
-                commit & push
+                Commit &amp; push
               </button>
             ) : null}
           </div>
         </div>
 
         {/* Sync row */}
-        <div className="p-4 flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            sync
-          </span>
+        <div className="flex items-center gap-2 p-4">
+          <span className={sectionLabel}>Sync</span>
           <button
             type="button"
             onClick={() => void onSync("pull")}
             disabled={busy !== null || !hasRemote}
-            className="border border-hive-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber disabled:opacity-40"
+            className={secondaryBtn}
           >
-            {busy === "pull" ? "pulling…" : "pull"}
+            {busy === "pull" ? "Pulling…" : "Pull"}
           </button>
           <button
             type="button"
             onClick={() => void onSync("fetch")}
             disabled={busy !== null || !hasRemote}
-            className="border border-hive-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber disabled:opacity-40"
+            className={secondaryBtn}
           >
-            {busy === "fetch" ? "fetching…" : "fetch"}
+            {busy === "fetch" ? "Fetching…" : "Fetch"}
           </button>
           <button
             type="button"
             onClick={() => void onSync("push")}
             disabled={busy !== null || !hasRemote}
-            className="border border-hive-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber disabled:opacity-40"
+            className={secondaryBtn}
           >
-            {busy === "push" ? "pushing…" : "push"}
+            {busy === "push" ? "Pushing…" : "Push"}
           </button>
           {!hasRemote ? (
-            <span className="ml-auto font-mono text-[10px] text-hive-muted">
-              no remote
-            </span>
+            <span className="ml-auto text-[12px] text-faint">No remote</span>
           ) : null}
         </div>
 
         {/* Recent commits */}
         <div className="p-4">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            recent commits
-          </span>
+          <span className={sectionLabel}>Recent commits</span>
           {log.length === 0 ? (
-            <p className="mt-2 font-mono text-xs text-hive-muted">—</p>
+            <p className="mt-2 text-[13px] text-faint">—</p>
           ) : (
-            <ul className="mt-2 divide-y divide-hive-border/50 border border-hive-border/50">
+            <ul className="mt-3 divide-y divide-border overflow-hidden rounded-md border border-border">
               {log.map((c) => (
                 <li
                   key={c.hash}
-                  className="flex items-start gap-2 px-2 py-1 font-mono text-xs"
+                  className="flex items-start gap-2.5 px-2.5 py-2 hover:bg-surface-2"
                 >
-                  <code className="text-hive-amber w-14 shrink-0">{c.short}</code>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-hive-text/90">{c.message}</p>
-                    <p className="text-[10px] text-hive-muted">
+                  <code className="w-14 shrink-0 font-mono text-[12px] text-primary">
+                    {c.short}
+                  </code>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] text-foreground/90">
+                      {c.message}
+                    </p>
+                    <p className="font-mono text-[11px] text-faint">
                       {c.author} · {formatRelative(c.date)}
                     </p>
                   </div>
@@ -550,7 +570,12 @@ export function GitPanel({ projectId, initialBranch }: Props) {
 
         {error ? (
           <div className="p-4">
-            <p className="font-mono text-xs text-red-400">{error}</p>
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/40 bg-destructive-soft px-3 py-2 text-[13px] text-destructive"
+            >
+              {error}
+            </p>
           </div>
         ) : null}
       </div>

@@ -57,8 +57,15 @@ export function EmbeddedTerminal({ projectId, shell: initialShell }: Props) {
       ]);
       if (disposed || !containerRef.current) return;
 
+      // Theme matches the app tokens (xterm needs concrete colors):
+      // background = --terminal-bg, foreground ≈ --foreground, cursor ≈ --primary.
       const term = new Terminal({
-        theme: { background: "#0b0d0f", foreground: "#e6e6e6", cursor: "#FFB000" },
+        theme: {
+          background: "#111110",
+          foreground: "#f2f1ee",
+          cursor: "#e2b14d",
+          selectionBackground: "#e2b14d4d",
+        },
         fontFamily: "var(--font-jetbrains-mono), ui-monospace, Menlo, monospace",
         fontSize: 13,
         cursorBlink: true,
@@ -81,6 +88,8 @@ export function EmbeddedTerminal({ projectId, shell: initialShell }: Props) {
       setStatus("connecting");
 
       socket.onopen = () => {
+        // A fresh, healthy connection resets the one-shot auto-reconnect budget.
+        reconnectedOnceRef.current = false;
         setStatus("connected");
         lastPongRef.current = Date.now();
         try {
@@ -181,10 +190,10 @@ export function EmbeddedTerminal({ projectId, shell: initialShell }: Props) {
 
   const dotClass =
     status === "connected"
-      ? "bg-hive-green"
+      ? "bg-success"
       : status === "dead"
-        ? "bg-hive-red"
-        : "bg-hive-amber";
+        ? "bg-destructive"
+        : "bg-warning animate-pulse";
 
   const dotLabel =
     status === "connected"
@@ -196,46 +205,62 @@ export function EmbeddedTerminal({ projectId, shell: initialShell }: Props) {
           : "disconnected";
 
   return (
-    <section className="border border-hive-border bg-hive-panel">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-hive-border px-3 py-2">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface-1 shadow-bevel">
+      {/* Desktop-style titlebar: decorative traffic-light dots (design language §4) */}
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface-2/60 px-3 py-2">
         <div className="flex items-center gap-3">
-          <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-            [ TERMINAL — live ]
+          <span className="flex items-center gap-2" aria-hidden="true">
+            <span className="h-3 w-3 rounded-full bg-terminal-dot-close" />
+            <span className="h-3 w-3 rounded-full bg-terminal-dot-minimize" />
+            <span className="h-3 w-3 rounded-full bg-terminal-dot-zoom" />
+          </span>
+          <h2 className="font-mono text-[11px] text-muted-foreground">
+            {projectId} — terminal
           </h2>
-          <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-hive-muted">
-            <span className={`inline-block h-2 w-2 rounded-full ${dotClass}`} />
+          <span
+            role="status"
+            className="flex items-center gap-1.5 font-mono text-[11px] text-faint"
+          >
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
             {dotLabel}
           </span>
         </div>
-        <div className="flex items-center gap-1">
-          {SHELL_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => {
-                if (opt.value !== shell) setShell(opt.value);
-              }}
-              className={`font-mono text-[11px] px-2 py-1 border ${
-                shell === opt.value
-                  ? "border-hive-amber text-hive-amber"
-                  : "border-hive-border text-hive-muted hover:text-hive-text"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div
+            role="group"
+            aria-label="Terminal shell"
+            className="flex items-center gap-0.5 rounded-md border border-border bg-background/40 p-0.5"
+          >
+            {SHELL_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={shell === opt.value}
+                onClick={() => {
+                  if (opt.value !== shell) setShell(opt.value);
+                }}
+                className={`h-6 rounded-xs px-2 font-mono text-[11px] ${
+                  shell === opt.value
+                    ? "bg-surface-3 text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={reconnect}
-            className="ml-2 font-mono text-[11px] px-2 py-1 border border-hive-border text-hive-muted hover:text-hive-amber hover:border-hive-amber"
+            className="inline-flex h-6 items-center rounded-md border border-border bg-surface-2 px-2 text-[11px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground"
           >
-            reconnect
+            Reconnect
           </button>
         </div>
       </header>
       <div
         ref={containerRef}
-        className="bg-hive-bg p-2 h-[320px] sm:h-[480px] w-full overflow-hidden"
+        className="min-h-0 w-full flex-1 overflow-hidden bg-terminal-bg p-2"
       />
     </section>
   );

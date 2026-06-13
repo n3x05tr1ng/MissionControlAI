@@ -1,9 +1,9 @@
-import Link from "next/link";
-
+import { EmptyState } from "@/components/EmptyState";
 import { NewTaskButton } from "@/components/project/NewTaskButton";
 import { ProjectSplit } from "@/components/project/ProjectSplit";
 import { ProjectActivity } from "@/components/stats/ProjectActivity";
 import { StatusBadge } from "@/components/StatusBadge";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { loadAppConfig, loadProjectsConfig } from "@/lib/config";
 import { readProjectSnapshot } from "@/lib/projectReader";
 import { notificationsForProject } from "@/lib/repos/notifications";
@@ -17,6 +17,26 @@ type PageProps = {
   params: Promise<{ id: string }>;
 };
 
+function BranchIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3 w-3 text-muted-foreground"
+      aria-hidden="true"
+    >
+      <circle cx="4.5" cy="3.5" r="1.8" />
+      <circle cx="4.5" cy="12.5" r="1.8" />
+      <circle cx="11.5" cy="5" r="1.8" />
+      <path d="M4.5 5.3v5.4M11.5 6.8c0 2.6-3 3.2-5 3.6" />
+    </svg>
+  );
+}
+
 export default async function ProjectPage({ params }: PageProps) {
   const { id } = await params;
   const { projects } = loadProjectsConfig();
@@ -24,25 +44,15 @@ export default async function ProjectPage({ params }: PageProps) {
 
   if (!cfg) {
     return (
-      <section className="max-w-3xl">
-        <header className="mb-4">
-          <h1 className="font-mono text-xs tracking-widest text-hive-amber">
-            [ PROJECT NOT FOUND ]
-          </h1>
-        </header>
-        <div className="border border-hive-border bg-hive-panel p-6">
-          <p className="text-sm text-hive-text">
-            No project with id <code className="font-mono text-hive-amber">{id}</code>.
-          </p>
-          <p className="mt-2 text-sm text-hive-muted">
-            Check{" "}
-            <code className="font-mono text-hive-amber">projects.config.json</code>{" "}
-            or go back to the{" "}
-            <Link href="/" className="text-hive-amber hover:underline">
-              dashboard
-            </Link>
-            .
-          </p>
+      <section className="mx-auto flex min-h-[60vh] max-w-3xl items-center">
+        <div className="w-full">
+          <EmptyState
+            illustration="folder"
+            title="Project not found"
+            description="We couldn't find this project — it may have been removed, or the link is out of date."
+            cta={{ label: "Back to dashboard", href: "/" }}
+            secondary={{ label: "Open settings", href: "/settings" }}
+          />
         </div>
       </section>
     );
@@ -61,33 +71,31 @@ export default async function ProjectPage({ params }: PageProps) {
   const lastRunAt = state.lastSession?.endedAt ?? null;
 
   return (
-    <section className="max-w-7xl">
-      <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href="/"
-            className="font-mono text-[11px] uppercase tracking-widest text-hive-muted hover:text-hive-amber"
-          >
-            ← back
-          </Link>
-          <h1 className="text-xl font-semibold text-hive-text">{cfg.name}</h1>
-          <StatusBadge status={state.status} />
-          {git?.branch ? (
-            <code className="font-mono text-[11px] text-hive-muted">
-              {git.branch}
-              {git.dirty ? "*" : ""}
-            </code>
-          ) : null}
-          {lastRunAt ? (
-            <span className="font-mono text-[11px] text-hive-muted">
-              ran {formatRelative(lastRunAt)}
-            </span>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2">
-          <NewTaskButton />
-        </div>
-      </header>
+    <section className="mx-auto flex max-w-7xl flex-col">
+      <PageHeader
+        overline="Project"
+        title={cfg.name}
+        description={
+          lastRunAt ? `Last run ${formatRelative(lastRunAt)}` : "No runs yet"
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2.5">
+            <StatusBadge status={state.status} />
+            {git?.branch ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                <BranchIcon />
+                {git.branch}
+                {git.dirty ? (
+                  <span className="text-warning" title="Uncommitted changes">
+                    *
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+            <NewTaskButton />
+          </div>
+        }
+      />
 
       <ProjectSplit
         projectId={cfg.id}
