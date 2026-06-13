@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { Skeleton } from "@/components/ui/Skeleton";
 
 type Folder = {
   name: string;
@@ -33,10 +35,89 @@ const QUICK_JUMPS: Array<{ label: string; path: string }> = [
   { label: "tmp", path: TMP },
 ];
 
+/* ------------------------------ inline icons ----------------------------- */
+
+function FolderIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M1.5 4.5A1.5 1.5 0 0 1 3 3h3l1.5 2H13a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 13 13H3a1.5 1.5 0 0 1-1.5-1.5z" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="m6 4 4 4-4 4" />
+    </svg>
+  );
+}
+
+function ArrowUpIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M8 13V3M4 7l4-4 4 4" />
+    </svg>
+  );
+}
+
+function XIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M4 4l8 8M12 4l-8 8" />
+    </svg>
+  );
+}
+
+/* -------------------------------- trigger -------------------------------- */
+
 export function PathPicker({
   value,
   onChange,
-  placeholder = "(no folder selected)",
+  placeholder = "/path/to/folder",
   rootHint = "home",
   requireGitRepo = false,
 }: Props) {
@@ -45,19 +126,22 @@ export function PathPicker({
   return (
     <>
       <div className="flex items-stretch gap-2">
-        <div
-          className="flex-1 truncate border border-hive-border bg-hive-bg px-2 py-1 font-mono text-sm text-hive-text"
-          title={value || placeholder}
-        >
-          {value || (
-            <span className="text-hive-muted">{placeholder}</span>
-          )}
-        </div>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="Folder path"
+          className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 font-mono text-[13px] text-foreground placeholder:text-faint focus:border-primary/50 focus:ring-2 focus:ring-ring focus-visible:outline-none"
+        />
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="border border-hive-amber bg-transparent px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-hive-amber hover:bg-hive-amber/10"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface-2 px-3 text-[13px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground"
         >
+          <FolderIcon className="text-faint" />
           Browse
         </button>
       </div>
@@ -76,6 +160,15 @@ export function PathPicker({
   );
 }
 
+/* ----------------------------- folder browser ---------------------------- */
+
+type LoadResult = {
+  /** Path that was requested when this result resolved. */
+  requested: string;
+  data: BrowseResponse | null;
+  error: string | null;
+};
+
 function BrowseModal({
   initialPath,
   requireGitRepo,
@@ -87,105 +180,213 @@ function BrowseModal({
   onClose: () => void;
   onPick: (path: string) => void;
 }) {
-  const [current, setCurrent] = useState<string>(initialPath);
-  const [data, setData] = useState<BrowseResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [requested, setRequested] = useState<string>(initialPath);
+  const [result, setResult] = useState<LoadResult | null>(null);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const listRef = useRef<HTMLUListElement>(null);
+  // hasGit for paths we have seen in parent listings (the API only reports
+  // hasGit for children, never for the current dir itself).
+  const [gitMap, setGitMap] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map(),
+  );
 
-  const load = useCallback(async (p: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/fs/browse?path=${encodeURIComponent(p)}&showHidden=true`,
-      );
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${res.status}`);
-      }
-      const json = (await res.json()) as BrowseResponse;
-      setData(json);
-      setCurrent(json.path);
-    } catch (err) {
-      setError((err as Error).message);
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
+  // Fetch on navigation. All setState calls happen inside promise callbacks
+  // (never synchronously in the effect body) and `loading` is derived from
+  // requested !== result.requested — no set-state-in-effect.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/fs/browse?path=${encodeURIComponent(requested)}&showHidden=true`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+        return (await res.json()) as BrowseResponse;
+      })
+      .then((json) => {
+        if (cancelled) return;
+        setGitMap((prev) => {
+          const next = new Map(prev);
+          for (const f of json.folders) next.set(f.path, f.hasGit);
+          return next;
+        });
+        setResult({ requested, data: json, error: null });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setResult({
+          requested,
+          data: null,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [requested]);
+
+  const loading = result?.requested !== requested;
+  const data = loading ? null : (result?.data ?? null);
+  const error = loading ? null : (result?.error ?? null);
+  const current = data?.path ?? requested;
+  const folders = useMemo(() => data?.folders ?? [], [data]);
+  const currentIsGit = gitMap.get(current) ?? false;
+  const pickDisabled = requireGitRepo && !currentIsGit;
+
+  const navigate = useCallback((p: string) => {
+    setActiveIndex(-1);
+    setRequested(p);
   }, []);
 
-  useEffect(() => {
-    void load(initialPath);
-  }, [initialPath, load]);
-
-  const currentIsGit = useMemo(() => {
-    if (!data) return false;
-    // We don't have hasGit for the current dir from the API; infer from parent listing.
-    return false;
-  }, [data]);
-
+  // Keyboard: ↑/↓ move highlight, →/Enter open folder, ←/Backspace go up,
+  // ⌘/Ctrl+Enter (or Enter with nothing highlighted) picks the current dir.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        // Capture + stopPropagation so a parent modal (e.g. ProjectForm)
+        // doesn't also close from the same keypress.
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      if (loading) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((i) => Math.min(i + 1, folders.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((i) => Math.max(i - 1, -1));
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "Backspace") {
+        if (data?.parent) {
+          e.preventDefault();
+          navigate(data.parent);
+        }
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        const f = folders[activeIndex];
+        if (f) {
+          e.preventDefault();
+          navigate(f.path);
+        }
+        return;
+      }
       if (e.key === "Enter") {
-        if (!requireGitRepo) onPick(current);
+        // Let focused buttons handle their own Enter.
+        if (target instanceof HTMLButtonElement) return;
+        e.preventDefault();
+        if (e.metaKey || e.ctrlKey) {
+          if (!pickDisabled) onPick(current);
+          return;
+        }
+        const f = folders[activeIndex];
+        if (f) {
+          navigate(f.path);
+        } else if (!pickDisabled) {
+          onPick(current);
+        }
       }
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [current, onClose, onPick, requireGitRepo]);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [
+    activeIndex,
+    current,
+    data,
+    folders,
+    loading,
+    navigate,
+    onClose,
+    onPick,
+    pickDisabled,
+  ]);
+
+  // Keep the highlighted row in view (no state changes here).
+  useEffect(() => {
+    if (activeIndex < 0) return;
+    const el = listRef.current?.children[activeIndex] as
+      | HTMLElement
+      | undefined;
+    el?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
 
   const segments = useMemo(() => buildBreadcrumb(current), [current]);
-  const useDisabled = requireGitRepo && !currentIsGit;
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+      className="hive-modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]"
       onClick={onClose}
     >
       <div
-        className="flex h-[600px] max-h-[90vh] w-full max-w-2xl flex-col border border-hive-border bg-hive-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Select a folder"
+        className="glass animate-overlay flex h-[600px] max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl shadow-overlay"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-hive-border px-4 py-2">
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-hive-amber">
-            [ Pick a folder ]
+        <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <h2 className="text-[15px] font-medium text-foreground">
+            Select a folder
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="font-mono text-xs text-hive-muted hover:text-hive-amber"
+            aria-label="Close"
+            className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-surface-2 hover:text-foreground"
           >
-            ESC
+            <XIcon />
           </button>
         </header>
 
-        <div className="border-b border-hive-border px-4 py-2">
-          <div className="flex flex-wrap items-center gap-1 font-mono text-xs text-hive-text">
-            {segments.map((seg, idx) => (
-              <span key={seg.path} className="flex items-center gap-1">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-0.5 overflow-x-auto border-b border-border px-3 py-2"
+        >
+          {segments.map((seg, idx) => {
+            const isLast = idx === segments.length - 1;
+            return (
+              <span key={seg.path} className="flex shrink-0 items-center">
                 {idx > 0 ? (
-                  <span className="text-hive-muted">/</span>
+                  <ChevronRightIcon className="shrink-0 text-faint" />
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => load(seg.path)}
-                  className="hover:text-hive-amber"
+                  onClick={() => navigate(seg.path)}
+                  aria-current={isLast ? "location" : undefined}
+                  className={`rounded-sm px-1.5 py-0.5 font-mono text-[12px] ${
+                    isLast
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                  }`}
                 >
                   {seg.label}
                 </button>
               </span>
-            ))}
-          </div>
-        </div>
+            );
+          })}
+        </nav>
 
-        <div className="flex flex-wrap items-center gap-2 border-b border-hive-border px-4 py-2">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2">
           {QUICK_JUMPS.map((j) => (
             <button
               key={j.path}
               type="button"
-              onClick={() => load(j.path)}
-              className="border border-hive-border bg-transparent px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:border-hive-amber hover:text-hive-amber"
+              onClick={() => navigate(j.path)}
+              className="h-7 rounded-full border border-border bg-surface-2 px-2.5 text-[12px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground"
             >
               {j.label}
             </button>
@@ -193,10 +394,11 @@ function BrowseModal({
           {data?.parent ? (
             <button
               type="button"
-              onClick={() => data.parent && load(data.parent)}
-              className="ml-auto border border-hive-border bg-transparent px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:border-hive-amber hover:text-hive-amber"
+              onClick={() => data.parent && navigate(data.parent)}
+              className="ml-auto inline-flex h-7 items-center gap-1 rounded-full border border-border bg-surface-2 px-2.5 text-[12px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground"
             >
-              .. Up
+              <ArrowUpIcon />
+              Up
             </button>
           ) : null}
         </div>
@@ -205,40 +407,64 @@ function BrowseModal({
           {loading ? (
             <ListSkeleton />
           ) : error ? (
-            <div className="px-4 py-3 font-mono text-xs text-red-400">{error}</div>
-          ) : data && data.folders.length === 0 ? (
-            <div className="px-4 py-3 font-mono text-xs text-hive-muted">
-              (empty)
+            <div className="flex flex-col items-start gap-3 px-4 py-4">
+              <p
+                role="alert"
+                className="w-full rounded-md border border-destructive/40 bg-destructive-soft px-3 py-2 text-[13px] text-destructive"
+              >
+                {error}
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate(HOME)}
+                className="h-8 rounded-md border border-border bg-surface-2 px-3 text-[13px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground"
+              >
+                Go to Home
+              </button>
+            </div>
+          ) : folders.length === 0 ? (
+            <div className="animate-enter flex h-full flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+              <FolderIcon className="mb-1 text-faint" />
+              <p className="text-[13px] font-medium text-foreground">
+                No subfolders here
+              </p>
+              <p className="text-[12px] text-muted-foreground">
+                You can still pick this folder from the bar below.
+              </p>
             </div>
           ) : (
-            <ul>
-              {data?.folders.map((f) => {
-                const dim = requireGitRepo && !f.hasGit;
+            <ul ref={listRef} className="divide-y divide-border">
+              {folders.map((f, idx) => {
+                const dimmed = requireGitRepo && !f.hasGit;
+                const active = idx === activeIndex;
                 return (
                   <li
                     key={f.path}
-                    className={`flex items-center justify-between border-b border-hive-border/40 px-4 py-1.5 font-mono text-xs ${
-                      dim ? "opacity-50" : ""
-                    } hover:bg-hive-amber/5`}
+                    className={`group flex min-h-11 items-center gap-1 pr-3 pl-4 ${
+                      active ? "bg-surface-2" : "hover:bg-surface-2"
+                    } ${dimmed ? "opacity-50" : ""}`}
                   >
                     <button
                       type="button"
-                      onClick={() => load(f.path)}
-                      className="flex flex-1 items-center gap-2 text-left text-hive-text hover:text-hive-amber"
+                      onClick={() => navigate(f.path)}
+                      className="flex min-w-0 flex-1 items-center gap-2.5 py-2 text-left"
                     >
-                      <span className="text-hive-muted">[D]</span>
-                      <span>{f.name}</span>
+                      <FolderIcon className="shrink-0 text-faint" />
+                      <span className="truncate text-[13px] text-foreground">
+                        {f.name}
+                      </span>
                       {f.hasGit ? (
-                        <span className="ml-1 border border-hive-amber/60 px-1 text-[9px] uppercase tracking-widest text-hive-amber">
+                        <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 font-mono text-[10px] text-primary">
                           git
                         </span>
                       ) : null}
+                      <ChevronRightIcon className="ml-auto shrink-0 text-faint opacity-0 group-hover:opacity-100" />
                     </button>
                     <button
                       type="button"
                       onClick={() => onPick(f.path)}
                       disabled={requireGitRepo && !f.hasGit}
-                      className="ml-2 border border-hive-border bg-transparent px-2 py-0.5 text-[10px] uppercase tracking-widest text-hive-muted hover:border-hive-amber hover:text-hive-amber disabled:cursor-not-allowed disabled:opacity-40"
+                      className="h-7 shrink-0 rounded-md border border-border bg-surface-2 px-2.5 text-[12px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Select
                     </button>
@@ -249,15 +475,28 @@ function BrowseModal({
           )}
         </div>
 
-        <footer className="flex items-center justify-between border-t border-hive-border px-4 py-2">
-          <div className="truncate font-mono text-[11px] text-hive-muted" title={current}>
-            {current}
+        <footer className="flex items-center gap-3 border-t border-border px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div
+              className="truncate font-mono text-[12px] text-muted-foreground"
+              title={current}
+            >
+              {current}
+            </div>
+            <div className="mt-1.5 hidden items-center gap-x-2 gap-y-1 sm:flex">
+              <span className="keycap">↑↓</span>
+              <span className="text-[11px] text-faint">navigate</span>
+              <span className="keycap">↵</span>
+              <span className="text-[11px] text-faint">open</span>
+              <span className="keycap">⌘↵</span>
+              <span className="text-[11px] text-faint">use folder</span>
+            </div>
           </div>
           <button
             type="button"
             onClick={() => onPick(current)}
-            disabled={useDisabled}
-            className="border border-hive-amber bg-transparent px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-hive-amber hover:bg-hive-amber/10 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={pickDisabled}
+            className="h-9 shrink-0 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-primary-hover hover:shadow-glow disabled:cursor-not-allowed disabled:opacity-50"
           >
             Use this folder
           </button>
@@ -268,14 +507,16 @@ function BrowseModal({
 }
 
 function ListSkeleton() {
+  const widths = [46, 62, 38, 54, 70, 44, 58, 50];
   return (
-    <ul className="px-4 py-2">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <li
-          key={i}
-          className="my-1 h-5 animate-pulse bg-hive-border/40"
-          style={{ width: `${40 + ((i * 13) % 50)}%` }}
-        />
+    <ul className="divide-y divide-border" aria-hidden="true">
+      {widths.map((w, i) => (
+        <li key={i} className="flex min-h-11 items-center gap-2.5 px-4">
+          <Skeleton className="h-4 w-4 rounded-xs" />
+          <div style={{ width: `${w}%` }}>
+            <Skeleton className="h-3.5 w-full" />
+          </div>
+        </li>
       ))}
     </ul>
   );
@@ -283,7 +524,9 @@ function ListSkeleton() {
 
 function buildBreadcrumb(p: string): Array<{ label: string; path: string }> {
   const segments = p.split("/").filter(Boolean);
-  const out: Array<{ label: string; path: string }> = [{ label: "/", path: "/" }];
+  const out: Array<{ label: string; path: string }> = [
+    { label: "/", path: "/" },
+  ];
   let acc = "";
   for (const seg of segments) {
     acc += `/${seg}`;

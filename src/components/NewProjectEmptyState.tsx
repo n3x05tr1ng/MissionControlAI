@@ -1,29 +1,14 @@
-"use client";
-
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-
 import { EmptyState } from "@/components/EmptyState";
-import { HexIcon } from "@/components/icons/HexIcon";
-import { NewProjectModal } from "@/components/NewProjectModal";
 
+// Server-safe: the CTA uses the serializable `modal` form of EmptyState,
+// which opens the global "new project" modal via modalBus.
 export function NewProjectEmptyState() {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
   return (
-    <>
-      <EmptyState
-        icon={<HexIcon size={48} strokeWidth={1.25} />}
-        title="No projects yet"
-        description="Add your first project to start managing your work from one place."
-        cta={{ label: "+ New project", onClick: () => setOpen(true) }}
-      />
-      {open ? (
-        <NewProjectModal
-          onClose={() => setOpen(false)}
-          onCreated={() => router.refresh()}
-        />
-      ) : null}
-    </>
+    <EmptyState
+      illustration="hex"
+      title="No projects yet"
+      description="Connect a local repository and Hive will keep its agents, tasks, and runs in one place."
+      cta={{ label: "New project", modal: "newProject" }}
+    />
   );
 }

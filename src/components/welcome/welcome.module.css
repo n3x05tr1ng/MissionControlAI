@@ -1,0 +1,106 @@
+/* Welcome wizard motion — scoped keyframes that complement globals.css.
+   Only opacity/transform are animated (plus a one-shot SVG stroke draw for
+   the final checkmark, explicitly part of the celebration moment).
+   The global `prefers-reduced-motion` kill-switch in globals.css neutralizes
+   all of these; the local guard below is belt-and-suspenders. */
+
+/* Directional step transitions (slide + fade) */
+.stepForward {
+  animation: step-fwd 240ms var(--ease-out) both;
+}
+.stepBack {
+  animation: step-back 240ms var(--ease-out) both;
+}
+@keyframes step-fwd {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes step-back {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Hero logo: slow vertical float */
+.logoFloat {
+  animation: logo-float 6s var(--ease-in-out) infinite alternate;
+}
+@keyframes logo-float {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-6px);
+  }
+}
+
+/* Celebration: circle pops in with a soft spring… */
+.checkCircle {
+  transform-origin: center;
+  animation: pop-in 420ms var(--ease-spring) both;
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* …an amber ring expands outward… */
+.ringPing {
+  animation: ring-ping 900ms var(--ease-out) 200ms both;
+}
+@keyframes ring-ping {
+  from {
+    opacity: 0.8;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* …and the checkmark draws itself (one-shot stroke draw). */
+.checkPath {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: check-draw 480ms var(--ease-out) 280ms forwards;
+}
+@keyframes check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stepForward,
+  .stepBack,
+  .logoFloat,
+  .checkCircle,
+  .ringPing {
+    animation: none;
+  }
+  .ringPing {
+    opacity: 0;
+  }
+  .checkPath {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

@@ -37,8 +37,8 @@ export function NewProjectModal({ onClose, onCreated }: Props) {
 
   return (
     <ProjectForm
-      title="NEW PROJECT"
-      submitLabel="Create"
+      title="New project"
+      submitLabel="Create project"
       onClose={onClose}
       onSubmit={submit}
     />
