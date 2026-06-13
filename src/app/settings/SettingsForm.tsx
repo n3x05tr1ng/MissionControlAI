@@ -1,264 +1,444 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { confirm } from "@/components/ui/ConfirmDialog";
 import { notify } from "@/lib/ui/notify";
 
-type ModelEntry = { id: string; label: string; kind: "engine" | "assistant" };
+import { CatalogTable } from "./CatalogTable";
+import { SectionNav, type SectionDef } from "./SectionNav";
+import {
+  Field,
+  Select,
+  SectionCard,
+  StatusPill,
+  Switch,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "./controls";
+import {
+  ClockIcon,
+  CpuIcon,
+  EyeIcon,
+  EyeOffIcon,
+  KeyIcon,
+  LayersIcon,
+  PlugIcon,
+  TableIcon,
+} from "./icons";
+import type {
+  EngineProviderId,
+  McpCatalogEntry,
+  ModelEntry,
+  SettingsInitial,
+} from "./types";
 
-type McpCatalogEntry = {
-  id: string;
-  label: string;
-  description: string;
-  configHint: string;
-  defaultEnabled: boolean;
-};
+export type { SettingsInitial } from "./types";
 
-type SectionKey =
-  | "api_key"
+/* --------------------------------- secciones ------------------------------ */
+
+const SECTIONS: SectionDef[] = [
+  { id: "section-api-key", label: "API key", icon: <KeyIcon /> },
+  { id: "section-engine", label: "Engine", icon: <CpuIcon /> },
+  { id: "section-models", label: "Models", icon: <LayersIcon /> },
+  { id: "section-catalog", label: "Model catalog", icon: <TableIcon /> },
+  { id: "section-scheduler", label: "Scheduler", icon: <ClockIcon /> },
+  { id: "section-mcp", label: "MCP servers", icon: <PlugIcon /> },
+];
+
+/* ------------------------------- estado/diff ------------------------------ */
+
+type SettingKey =
   | "engine_provider"
-  | "engine"
-  | "assistant"
-  | "catalog"
-  | "scheduler"
-  | "mcp";
+  | "engine_default_model"
+  | "assistant_default_model"
+  | "auto_nudge_after_days"
+  | "models_catalog"
+  | "mcp_servers_enabled";
 
-type EngineProviderId = "claude-cli" | "claude-code";
-
-export type SettingsInitial = {
-  maskedKey: string | null;
+type Draft = {
   engineProvider: EngineProviderId;
   engineModel: string;
   assistantModel: string;
-  autoNudgeAfterDays: number;
-  modelsCatalog: ModelEntry[];
+  /** Como string para no pelear con el input number; se valida al guardar. */
+  autoNudge: string;
+  catalog: ModelEntry[];
   enabledMcp: string[];
 };
+
+function draftFromInitial(initial: SettingsInitial): Draft {
+  return {
+    engineProvider: initial.engineProvider,
+    engineModel: initial.engineModel,
+    assistantModel: initial.assistantModel,
+    autoNudge: String(initial.autoNudgeAfterDays),
+    catalog: initial.modelsCatalog.map((m) => ({ ...m })),
+    enabledMcp: [...initial.enabledMcp],
+  };
+}
+
+function cloneDraft(d: Draft): Draft {
+  return {
+    ...d,
+    catalog: d.catalog.map((m) => ({ ...m })),
+    enabledMcp: [...d.enabledMcp],
+  };
+}
+
+function normalizeCatalog(rows: ModelEntry[]): ModelEntry[] {
+  return rows.map((r) => ({
+    id: r.id.trim(),
+    label: r.label.trim(),
+    kind: r.kind,
+  }));
+}
+
+function catalogEqual(a: ModelEntry[], b: ModelEntry[]): boolean {
+  return (
+    JSON.stringify(normalizeCatalog(a)) === JSON.stringify(normalizeCatalog(b))
+  );
+}
+
+function sameSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((x) => set.has(x));
+}
+
+async function postSetting(
+  key: string,
+  value: unknown,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, value }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      return { ok: false, error: text || `HTTP ${res.status}` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/* ---------------------------------- form ---------------------------------- */
 
 interface SettingsFormProps {
   initial: SettingsInitial;
   mcpCatalog: McpCatalogEntry[];
 }
 
-const inputClass =
-  "bg-hive-panel border border-hive-border px-3 py-2 text-sm text-hive-text outline-none focus:border-hive-amber-dim";
-const labelClass =
-  "font-mono text-[11px] tracking-widest text-hive-muted uppercase";
-const panelClass = "border border-hive-border bg-hive-panel p-4 space-y-3";
-const buttonClass =
-  "font-mono text-xs tracking-widest text-hive-amber border border-hive-border px-3 py-2 hover:border-hive-amber-dim disabled:opacity-40 disabled:cursor-not-allowed";
-
 export function SettingsForm({ initial, mcpCatalog }: SettingsFormProps) {
+  /* ----- draft global + baseline (dirty = diff entre ambos) ----- */
+  const [baseline, setBaseline] = useState<Draft>(() =>
+    draftFromInitial(initial),
+  );
+  const [draft, setDraft] = useState<Draft>(() => draftFromInitial(initial));
+  const [savingAll, setSavingAll] = useState(false);
+
+  /* ----- API key (acción aparte: secreto write-only, nunca en el diff) ----- */
   const [maskedKey, setMaskedKey] = useState<string | null>(initial.maskedKey);
   const [apiKey, setApiKey] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [reveal, setReveal] = useState(false);
+  const revealTimer = useRef<number | null>(null);
 
-  const [engineProvider, setEngineProvider] = useState<EngineProviderId>(
-    initial.engineProvider,
-  );
+  /* ----- estado del claude CLI ----- */
   const [cliStatus, setCliStatus] = useState<
     { ok: true; version: string } | { ok: false; error: string } | null
   >(null);
 
-  const [catalog, setCatalog] = useState<ModelEntry[]>(initial.modelsCatalog);
-  const [catalogText, setCatalogText] = useState(
-    JSON.stringify(initial.modelsCatalog, null, 2),
+  /* ----- scroll-spy ----- */
+  const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
+
+  const dirty: Record<SettingKey, boolean> = useMemo(
+    () => ({
+      engine_provider: draft.engineProvider !== baseline.engineProvider,
+      engine_default_model: draft.engineModel !== baseline.engineModel,
+      assistant_default_model:
+        draft.assistantModel !== baseline.assistantModel,
+      auto_nudge_after_days:
+        draft.autoNudge.trim() !== baseline.autoNudge.trim(),
+      models_catalog: !catalogEqual(draft.catalog, baseline.catalog),
+      mcp_servers_enabled: !sameSet(draft.enabledMcp, baseline.enabledMcp),
+    }),
+    [draft, baseline],
   );
 
-  const [engineModel, setEngineModel] = useState(initial.engineModel);
-  const [assistantModel, setAssistantModel] = useState(initial.assistantModel);
-  const [autoNudge, setAutoNudge] = useState<number>(initial.autoNudgeAfterDays);
-  const [enabledMcp, setEnabledMcp] = useState<Set<string>>(
-    new Set(initial.enabledMcp),
+  const dirtyKeys = useMemo(
+    () => (Object.keys(dirty) as SettingKey[]).filter((k) => dirty[k]),
+    [dirty],
   );
 
-  const [saving, setSaving] = useState<Record<SectionKey, boolean>>({
-    api_key: false,
-    engine_provider: false,
-    engine: false,
-    assistant: false,
-    catalog: false,
-    scheduler: false,
-    mcp: false,
-  });
-  const [saved, setSaved] = useState<Record<SectionKey, boolean>>({
-    api_key: false,
-    engine_provider: false,
-    engine: false,
-    assistant: false,
-    catalog: false,
-    scheduler: false,
-    mcp: false,
-  });
-  const [errors, setErrors] = useState<Record<SectionKey, string | null>>({
-    api_key: null,
-    engine_provider: null,
-    engine: null,
-    assistant: null,
-    catalog: null,
-    scheduler: null,
-    mcp: null,
-  });
+  const dirtySections = useMemo(() => {
+    const s = new Set<string>();
+    if (dirty.engine_provider) s.add("section-engine");
+    if (dirty.engine_default_model || dirty.assistant_default_model)
+      s.add("section-models");
+    if (dirty.models_catalog) s.add("section-catalog");
+    if (dirty.auto_nudge_after_days) s.add("section-scheduler");
+    if (dirty.mcp_servers_enabled) s.add("section-mcp");
+    return s;
+  }, [dirty]);
 
+  /* ----- validación en vivo (solo campos sucios) ----- */
+  const validation = useMemo(() => {
+    const v: Partial<Record<SettingKey, string>> = {};
+    if (dirty.engine_default_model && draft.engineModel.trim() === "") {
+      v.engine_default_model = "Select an engine model.";
+    }
+    if (dirty.assistant_default_model && draft.assistantModel.trim() === "") {
+      v.assistant_default_model = "Select an assistant model.";
+    }
+    if (dirty.auto_nudge_after_days) {
+      const n = Number(draft.autoNudge);
+      if (!Number.isInteger(n) || n < 1 || n > 90) {
+        v.auto_nudge_after_days = "Enter a whole number between 1 and 90.";
+      }
+    }
+    if (dirty.models_catalog) {
+      const rows = normalizeCatalog(draft.catalog);
+      if (rows.length === 0) {
+        v.models_catalog = "The catalog needs at least one model.";
+      } else if (rows.some((r) => r.id === "" || r.label === "")) {
+        v.models_catalog = "Every model needs an ID and a label.";
+      } else if (new Set(rows.map((r) => r.id)).size !== rows.length) {
+        v.models_catalog = "Model IDs must be unique.";
+      }
+    }
+    return v;
+  }, [dirty, draft]);
+
+  const hasErrors = Object.keys(validation).length > 0;
+
+  /* ----- opciones de los selects (siguen al catálogo editado en vivo) ----- */
   const engineOptions = useMemo(
-    () => catalog.filter((m) => m.kind === "engine"),
-    [catalog],
+    () => normalizeCatalog(draft.catalog).filter((m) => m.kind === "engine"),
+    [draft.catalog],
   );
-  const assistantPool = useMemo(() => {
-    const onlyAssistant = catalog.filter((m) => m.kind === "assistant");
-    return onlyAssistant.length > 0 ? onlyAssistant : catalog;
-  }, [catalog]);
+  const assistantOptions = useMemo(() => {
+    const rows = normalizeCatalog(draft.catalog);
+    const assistants = rows.filter((m) => m.kind === "assistant");
+    return assistants.length > 0 ? assistants : rows;
+  }, [draft.catalog]);
 
-  const flashSaved = (section: SectionKey): void => {
-    setSaved((s) => ({ ...s, [section]: true }));
-    window.setTimeout(() => {
-      setSaved((s) => ({ ...s, [section]: false }));
-    }, 2000);
-  };
+  /* --------------------------------- acciones ------------------------------ */
 
-  async function postSetting(
-    section: SectionKey,
-    body: { key: string; value: unknown },
-  ): Promise<boolean> {
-    setSaving((s) => ({ ...s, [section]: true }));
-    setErrors((e) => ({ ...e, [section]: null }));
-    try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+  const saveAll = useCallback(async (): Promise<void> => {
+    if (savingAll || dirtyKeys.length === 0 || hasErrors) return;
+    setSavingAll(true);
+
+    const normalizedCatalog = normalizeCatalog(draft.catalog);
+    const jobs: Array<{ key: SettingKey; value: unknown; label: string }> = [];
+    // El catálogo primero: los modelos por defecto pueden depender de él.
+    if (dirty.models_catalog) {
+      jobs.push({
+        key: "models_catalog",
+        value: normalizedCatalog,
+        label: "model catalog",
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
+    }
+    if (dirty.engine_provider) {
+      jobs.push({
+        key: "engine_provider",
+        value: draft.engineProvider,
+        label: "engine provider",
+      });
+    }
+    if (dirty.engine_default_model) {
+      jobs.push({
+        key: "engine_default_model",
+        value: draft.engineModel,
+        label: "engine model",
+      });
+    }
+    if (dirty.assistant_default_model) {
+      jobs.push({
+        key: "assistant_default_model",
+        value: draft.assistantModel,
+        label: "assistant model",
+      });
+    }
+    if (dirty.auto_nudge_after_days) {
+      jobs.push({
+        key: "auto_nudge_after_days",
+        value: Math.floor(Number(draft.autoNudge)),
+        label: "scheduler",
+      });
+    }
+    if (dirty.mcp_servers_enabled) {
+      jobs.push({
+        key: "mcp_servers_enabled",
+        value: draft.enabledMcp,
+        label: "MCP servers",
+      });
+    }
+
+    const failed: string[] = [];
+    let catalogSaved = false;
+    const nextBaseline = cloneDraft(baseline);
+    for (const job of jobs) {
+      const result = await postSetting(job.key, job.value);
+      if (!result.ok) {
+        failed.push(`${job.label} (${result.error})`);
+        continue;
       }
-      flashSaved(section);
-      notify.success("Saved");
-      return true;
-    } catch (err) {
-      const msg = (err as Error).message;
-      setErrors((e) => ({ ...e, [section]: msg }));
-      notify.error(msg);
-      return false;
-    } finally {
-      setSaving((s) => ({ ...s, [section]: false }));
-    }
-  }
-
-  async function saveApiKey(): Promise<void> {
-    if (apiKey.length === 0) return;
-    const ok = await postSetting("api_key", {
-      key: "anthropic_api_key",
-      value: apiKey,
-    });
-    if (ok) {
-      setApiKey("");
-      try {
-        const res = await fetch("/api/settings", { cache: "no-store" });
-        if (res.ok) {
-          const data = (await res.json()) as { anthropic_api_key: string | null };
-          setMaskedKey(data.anthropic_api_key);
-        }
-      } catch {
-        // ignore — UI keeps prior masked key
+      switch (job.key) {
+        case "models_catalog":
+          nextBaseline.catalog = normalizedCatalog.map((m) => ({ ...m }));
+          catalogSaved = true;
+          break;
+        case "engine_provider":
+          nextBaseline.engineProvider = draft.engineProvider;
+          break;
+        case "engine_default_model":
+          nextBaseline.engineModel = draft.engineModel;
+          break;
+        case "assistant_default_model":
+          nextBaseline.assistantModel = draft.assistantModel;
+          break;
+        case "auto_nudge_after_days":
+          nextBaseline.autoNudge = String(Math.floor(Number(draft.autoNudge)));
+          break;
+        case "mcp_servers_enabled":
+          nextBaseline.enabledMcp = [...draft.enabledMcp];
+          break;
       }
     }
-  }
 
-  async function saveEngine(): Promise<void> {
-    if (engineModel.length === 0) return;
-    await postSetting("engine", {
-      key: "engine_default_model",
-      value: engineModel,
-    });
-  }
-
-  async function saveEngineProvider(next: EngineProviderId): Promise<void> {
-    const prev = engineProvider;
-    setEngineProvider(next);
-    const ok = await postSetting("engine_provider", {
-      key: "engine_provider",
-      value: next,
-    });
-    if (!ok) setEngineProvider(prev);
-  }
-
-  async function saveAssistant(): Promise<void> {
-    if (assistantModel.length === 0) return;
-    await postSetting("assistant", {
-      key: "assistant_default_model",
-      value: assistantModel,
-    });
-  }
-
-  async function saveCatalog(): Promise<void> {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(catalogText);
-    } catch (err) {
-      setErrors((e) => ({
-        ...e,
-        catalog: `Invalid JSON: ${(err as Error).message}`,
+    setBaseline(nextBaseline);
+    if (catalogSaved) {
+      // Sincroniza el draft con las filas normalizadas (trim) ya persistidas.
+      setDraft((d) => ({
+        ...d,
+        catalog: normalizedCatalog.map((m) => ({ ...m })),
       }));
-      return;
     }
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      setErrors((e) => ({
-        ...e,
-        catalog: "Catalog must be a non-empty array.",
-      }));
-      return;
+    setSavingAll(false);
+
+    if (failed.length === 0) {
+      notify.success("Settings saved");
+    } else {
+      notify.error(`Some settings failed to save — ${failed.join(" · ")}`);
     }
-    const ok = await postSetting("catalog", {
-      key: "models_catalog",
-      value: parsed,
-    });
-    if (ok) setCatalog(parsed as ModelEntry[]);
+  }, [savingAll, dirtyKeys, hasErrors, dirty, draft, baseline]);
+
+  const discardAll = useCallback((): void => {
+    setDraft(cloneDraft(baseline));
+  }, [baseline]);
+
+  async function selectProvider(next: EngineProviderId): Promise<void> {
+    if (next === draft.engineProvider) return;
+    // Cambiar de proveedor afecta a TODOS los runs futuros: pedir confirmación
+    // salvo que el usuario esté volviendo al valor ya guardado.
+    if (next !== baseline.engineProvider) {
+      const ok = await confirm({
+        title: "Switch engine provider?",
+        message:
+          next === "claude-code"
+            ? "All future Engine and Kanban runs will call the Anthropic API directly and bill per token. This requires the API key above. The change applies when you save."
+            : "All future Engine and Kanban runs will spawn the local claude CLI and reuse your Claude Code subscription. The change applies when you save.",
+        confirmLabel: "Switch provider",
+      });
+      if (!ok) return;
+    }
+    setDraft((d) => ({ ...d, engineProvider: next }));
   }
 
-  async function saveScheduler(): Promise<void> {
-    const n = Number(autoNudge);
-    if (!Number.isFinite(n) || n < 1 || n > 90) {
-      setErrors((e) => ({
-        ...e,
-        scheduler: "Value must be an integer between 1 and 90.",
-      }));
-      return;
-    }
-    await postSetting("scheduler", {
-      key: "auto_nudge_after_days",
-      value: Math.floor(n),
+  function toggleMcp(id: string): void {
+    setDraft((d) => {
+      const has = d.enabledMcp.includes(id);
+      return {
+        ...d,
+        enabledMcp: has
+          ? d.enabledMcp.filter((x) => x !== id)
+          : [...d.enabledMcp, id],
+      };
     });
   }
 
-  // Debounced MCP save.
-  const mcpTimer = useRef<number | null>(null);
-  function toggleMcp(id: string, on: boolean): void {
-    setEnabledMcp((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(id);
-      else next.delete(id);
-      if (mcpTimer.current !== null) window.clearTimeout(mcpTimer.current);
-      mcpTimer.current = window.setTimeout(() => {
-        void postSetting("mcp", {
-          key: "mcp_servers_enabled",
-          value: Array.from(next),
-        });
-      }, 300);
+  function toggleReveal(): void {
+    if (revealTimer.current !== null) {
+      window.clearTimeout(revealTimer.current);
+      revealTimer.current = null;
+    }
+    setReveal((prev) => {
+      const next = !prev;
+      if (next) {
+        // Reveal momentáneo: se vuelve a enmascarar sola a los 5s.
+        revealTimer.current = window.setTimeout(() => {
+          setReveal(false);
+          revealTimer.current = null;
+        }, 5000);
+      }
       return next;
     });
   }
 
+  async function saveApiKey(): Promise<void> {
+    const value = apiKey.trim();
+    if (value.length === 0 || savingKey) return;
+    setSavingKey(true);
+    setKeyError(null);
+    const result = await postSetting("anthropic_api_key", value);
+    if (result.ok) {
+      setApiKey("");
+      setReveal(false);
+      notify.success("API key saved");
+      try {
+        const res = await fetch("/api/settings", { cache: "no-store" });
+        if (res.ok) {
+          const data = (await res.json()) as {
+            anthropic_api_key: string | null;
+          };
+          setMaskedKey(data.anthropic_api_key);
+        }
+      } catch {
+        // ignore — la UI conserva la máscara anterior
+      }
+    } else {
+      setKeyError(result.error);
+      notify.error(result.error);
+    }
+    setSavingKey(false);
+  }
+
+  function scrollToSection(id: string): void {
+    setActiveSection(id);
+    document.getElementById(id)?.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "start",
+    });
+  }
+
+  /* --------------------------------- effects ------------------------------- */
+
+  // Limpieza del timer de reveal.
   useEffect(() => {
     return () => {
-      if (mcpTimer.current !== null) window.clearTimeout(mcpTimer.current);
+      if (revealTimer.current !== null)
+        window.clearTimeout(revealTimer.current);
     };
   }, []);
 
+  // Detección del claude CLI.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch("/api/system/claude-cli", { cache: "no-store" });
+        const res = await fetch("/api/system/claude-cli", {
+          cache: "no-store",
+        });
         if (!res.ok) return;
         const data = (await res.json()) as
           | { ok: true; version: string }
@@ -275,337 +455,452 @@ export function SettingsForm({ initial, mcpCatalog }: SettingsFormProps) {
     };
   }, []);
 
+  // Scroll-spy: la primera sección visible (en orden DOM) marca la nav.
+  useEffect(() => {
+    const visible = new Set<string>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).id;
+          if (entry.isIntersecting) visible.add(id);
+          else visible.delete(id);
+        }
+        const first = SECTIONS.find((s) => visible.has(s.id));
+        if (first) setActiveSection(first.id);
+      },
+      { rootMargin: "-80px 0px -55% 0px" },
+    );
+    for (const s of SECTIONS) {
+      const el = document.getElementById(s.id);
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  // ⌘S / Ctrl+S guarda los cambios pendientes.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void saveAll();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [saveAll]);
+
+  /* --------------------------------- render -------------------------------- */
+
+  const cliPill = cliStatus ? (
+    cliStatus.ok ? (
+      <StatusPill tone="success">
+        v{cliStatus.version.replace(/^v/, "")}
+      </StatusPill>
+    ) : (
+      <StatusPill tone="destructive">not detected</StatusPill>
+    )
+  ) : null;
+
   return (
-    <div className="space-y-4">
-      <section className={panelClass}>
-        <header className="flex items-baseline justify-between">
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-hive-amber">
-            API key
-          </h2>
-          <KeyStatusPill present={maskedKey !== null} />
-        </header>
-        <label htmlFor="anthropic_api_key" className={labelClass}>
-          Anthropic API key (Assistant only)
-        </label>
-        <p className="text-[11px] text-hive-muted">
-          Used ONLY by the Assistant chat (<code className="font-mono">/assistant</code>)
-          for portfolio Q&amp;A. The Engine and Kanban tasks use your local
-          Claude Code subscription via the <code className="font-mono">claude</code> CLI —
-          no key needed.
-        </p>
-        <div className="flex items-center gap-2">
-          <input
-            id="anthropic_api_key"
-            type="password"
-            autoComplete="off"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={maskedKey ?? "sk-ant-..."}
-            className={`${inputClass} flex-1 font-mono`}
+    <div className="flex flex-col gap-6 pb-24 lg:flex-row lg:items-start lg:gap-10">
+      {/* Nav móvil: pills horizontales pegadas arriba */}
+      <div className="glass sticky top-0 z-30 -mx-2 rounded-lg px-2 py-1.5 lg:hidden">
+        <SectionNav
+          sections={SECTIONS}
+          activeId={activeSection}
+          dirtyIds={dirtySections}
+          onSelect={scrollToSection}
+          orientation="horizontal"
+        />
+      </div>
+
+      {/* Nav de escritorio: rail sticky con scroll-spy */}
+      <aside className="hidden w-48 shrink-0 lg:block">
+        <div className="animate-enter sticky top-6">
+          <SectionNav
+            sections={SECTIONS}
+            activeId={activeSection}
+            dirtyIds={dirtySections}
+            onSelect={scrollToSection}
           />
-          <button
-            type="button"
-            disabled={saving.api_key || apiKey.length === 0}
-            onClick={() => void saveApiKey()}
-            className={buttonClass}
+        </div>
+      </aside>
+
+      <div className="stagger-children flex min-w-0 flex-1 flex-col gap-5">
+        {/* ------------------------------ API key ----------------------------- */}
+        <SectionCard
+          id="section-api-key"
+          title="API key"
+          description={
+            <>
+              Used only by the Assistant chat for portfolio Q&amp;A. Engine and
+              Kanban runs use your local Claude Code subscription via the{" "}
+              <code className="font-mono text-foreground/80">claude</code> CLI
+              — no key needed there.
+            </>
+          }
+          badge={
+            maskedKey !== null ? (
+              <StatusPill tone="success">configured</StatusPill>
+            ) : (
+              <StatusPill tone="warning">not configured</StatusPill>
+            )
+          }
+        >
+          <Field
+            label="Anthropic API key"
+            htmlFor="anthropic_api_key"
+            hint={
+              maskedKey !== null ? (
+                <>
+                  Current key:{" "}
+                  <code className="font-mono text-foreground/80">
+                    {maskedKey}
+                  </code>
+                  . Paste a new key to replace it.
+                </>
+              ) : (
+                "Paste a key from the Anthropic Console to enable the Assistant."
+              )
+            }
+            error={keyError}
           >
-            {saving.api_key ? "SAVING…" : "SAVE"}
-          </button>
-          {saved.api_key && <SavedPill />}
-        </div>
-        {errors.api_key && (
-          <p className="text-xs text-hive-red">{errors.api_key}</p>
-        )}
-      </section>
-
-      <section className={panelClass}>
-        <header className="flex items-baseline justify-between">
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-hive-amber">
-            Engine
-          </h2>
-          {saving.engine_provider && (
-            <span className="font-mono text-[10px] tracking-widest text-hive-muted">
-              SAVING…
-            </span>
-          )}
-          {saved.engine_provider && <SavedPill />}
-        </header>
-        <p className="text-[11px] text-hive-muted">
-          Which agent backend the Engine and Kanban tasks run on. Defaults to
-          the local <code className="font-mono">claude</code> CLI so runs reuse
-          your Claude Code subscription with no per-token billing.
-        </p>
-        <div className="space-y-2">
-          <label className="flex items-start gap-3">
-            <input
-              type="radio"
-              name="engine_provider"
-              value="claude-cli"
-              checked={engineProvider === "claude-cli"}
-              onChange={() => void saveEngineProvider("claude-cli")}
-              className="mt-1 accent-hive-amber"
-            />
-            <span className="flex-1">
-              <span className="block text-sm text-hive-text">
-                Subscription (claude CLI — free if you have Claude Code){" "}
-                {cliStatus?.ok ? (
-                  <span className="ml-1 font-mono text-[10px] text-hive-green">
-                    ✓ {cliStatus.version}
-                  </span>
-                ) : cliStatus && !cliStatus.ok ? (
-                  <span className="ml-1 font-mono text-[10px] text-hive-red">
-                    not detected
-                  </span>
-                ) : null}
-              </span>
-              <span className="block text-[11px] text-hive-muted">
-                Spawns the local <code className="font-mono">claude</code>{" "}
-                binary as a headless PTY. Uses your existing auth.
-              </span>
-            </span>
-          </label>
-          <label className="flex items-start gap-3">
-            <input
-              type="radio"
-              name="engine_provider"
-              value="claude-code"
-              checked={engineProvider === "claude-code"}
-              onChange={() => void saveEngineProvider("claude-code")}
-              className="mt-1 accent-hive-amber"
-            />
-            <span className="flex-1">
-              <span className="block text-sm text-hive-text">
-                API key (Anthropic SDK — pay-per-token)
-              </span>
-              <span className="block text-[11px] text-hive-muted">
-                Uses{" "}
-                <code className="font-mono">@anthropic-ai/claude-agent-sdk</code>
-                . Requires <code className="font-mono">anthropic_api_key</code>{" "}
-                to be set above.
-              </span>
-            </span>
-          </label>
-        </div>
-        {errors.engine_provider && (
-          <p className="text-xs text-hive-red">{errors.engine_provider}</p>
-        )}
-      </section>
-
-      <section className={panelClass}>
-        <header>
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-hive-amber">
-            Models
-          </h2>
-        </header>
-
-        <div className="space-y-2">
-          <label htmlFor="engine_default_model" className={labelClass}>
-            Engine default model
-          </label>
-          <div className="flex items-center gap-2">
-            <select
-              id="engine_default_model"
-              value={engineModel}
-              onChange={(e) => setEngineModel(e.target.value)}
-              className={`${inputClass} flex-1`}
-            >
-              <option value="">— select —</option>
-              {engineOptions.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label} ({m.id})
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={saving.engine || engineModel.length === 0}
-              onClick={() => void saveEngine()}
-              className={buttonClass}
-            >
-              {saving.engine ? "SAVING…" : "SAVE"}
-            </button>
-            {saved.engine && <SavedPill />}
-          </div>
-          {errors.engine && (
-            <p className="text-xs text-hive-red">{errors.engine}</p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <label htmlFor="assistant_default_model" className={labelClass}>
-            Assistant model
-          </label>
-          <div className="flex items-center gap-2">
-            <select
-              id="assistant_default_model"
-              value={assistantModel}
-              onChange={(e) => setAssistantModel(e.target.value)}
-              className={`${inputClass} flex-1`}
-            >
-              <option value="">— select —</option>
-              {assistantPool.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label} ({m.id})
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={saving.assistant || assistantModel.length === 0}
-              onClick={() => void saveAssistant()}
-              className={buttonClass}
-            >
-              {saving.assistant ? "SAVING…" : "SAVE"}
-            </button>
-            {saved.assistant && <SavedPill />}
-          </div>
-          {errors.assistant && (
-            <p className="text-xs text-hive-red">{errors.assistant}</p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <label htmlFor="models_catalog" className={labelClass}>
-            Models catalog (advanced)
-          </label>
-          <p className="text-[11px] text-hive-muted">
-            Edit the list of models that show in the dropdowns above. JSON array
-            of <code className="font-mono text-hive-amber">{`{id, label, kind}`}</code>{" "}
-            where kind is <code className="font-mono">engine</code> or{" "}
-            <code className="font-mono">assistant</code>.
-          </p>
-          <textarea
-            id="models_catalog"
-            value={catalogText}
-            onChange={(e) => setCatalogText(e.target.value)}
-            spellCheck={false}
-            rows={8}
-            className={`${inputClass} w-full font-mono text-xs`}
-          />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={saving.catalog}
-              onClick={() => void saveCatalog()}
-              className={buttonClass}
-            >
-              {saving.catalog ? "SAVING…" : "SAVE CATALOG"}
-            </button>
-            {saved.catalog && <SavedPill />}
-          </div>
-          {errors.catalog && (
-            <p className="text-xs text-hive-red">{errors.catalog}</p>
-          )}
-        </div>
-      </section>
-
-      <section className={panelClass}>
-        <header>
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-hive-amber">
-            Scheduler
-          </h2>
-        </header>
-        <label htmlFor="auto_nudge" className={labelClass}>
-          Auto-nudge stale projects after N days
-        </label>
-        <div className="flex items-center gap-2">
-          <input
-            id="auto_nudge"
-            type="number"
-            min={1}
-            max={90}
-            value={autoNudge}
-            onChange={(e) => setAutoNudge(Number(e.target.value))}
-            className={`${inputClass} w-24 font-mono`}
-          />
-          <button
-            type="button"
-            disabled={saving.scheduler}
-            onClick={() => void saveScheduler()}
-            className={buttonClass}
-          >
-            {saving.scheduler ? "SAVING…" : "SAVE"}
-          </button>
-          {saved.scheduler && <SavedPill />}
-        </div>
-        {errors.scheduler && (
-          <p className="text-xs text-hive-red">{errors.scheduler}</p>
-        )}
-      </section>
-
-      <section className={panelClass}>
-        <header className="flex items-baseline justify-between">
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-hive-amber">
-            MCP servers
-          </h2>
-          {saving.mcp && (
-            <span className="font-mono text-[10px] tracking-widest text-hive-muted">
-              SAVING…
-            </span>
-          )}
-          {saved.mcp && <SavedPill />}
-        </header>
-        <p className="text-[11px] text-hive-muted">
-          Toggle which MCP servers Hive should consider exposing to agent
-          profiles. Saves automatically.
-        </p>
-        <ul className="divide-y divide-hive-border">
-          {mcpCatalog.map((m) => {
-            const on = enabledMcp.has(m.id);
-            return (
-              <li
-                key={m.id}
-                className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
-              >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
                 <input
-                  id={`mcp-${m.id}`}
-                  type="checkbox"
-                  checked={on}
-                  onChange={(e) => toggleMcp(m.id, e.target.checked)}
-                  className="mt-1 accent-hive-amber"
+                  id="anthropic_api_key"
+                  type={reveal ? "text" : "password"}
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-ant-…"
+                  className={`${inputClass} w-full pr-10 font-mono`}
                 />
-                <label htmlFor={`mcp-${m.id}`} className="flex-1 cursor-pointer">
-                  <span className="block text-sm text-hive-text">
-                    {m.label}{" "}
-                    <code className="font-mono text-[10px] text-hive-muted">
-                      {m.id}
-                    </code>
-                  </span>
-                  <span className="block text-[11px] text-hive-muted">
-                    {m.description}
-                  </span>
-                  <span className="block text-[10px] text-hive-muted/70">
-                    {m.configHint}
-                  </span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-        {errors.mcp && <p className="text-xs text-hive-red">{errors.mcp}</p>}
-      </section>
+                <button
+                  type="button"
+                  onClick={toggleReveal}
+                  aria-label={reveal ? "Hide key" : "Show key for 5 seconds"}
+                  aria-pressed={reveal}
+                  className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-faint hover:bg-surface-2 hover:text-foreground"
+                >
+                  {reveal ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+              <button
+                type="button"
+                disabled={savingKey || apiKey.trim().length === 0}
+                onClick={() => void saveApiKey()}
+                className={primaryButtonClass}
+              >
+                {savingKey ? "Saving…" : "Save key"}
+              </button>
+            </div>
+          </Field>
+        </SectionCard>
+
+        {/* ------------------------------ Engine ------------------------------ */}
+        <SectionCard
+          id="section-engine"
+          title="Engine provider"
+          description="Which agent backend the Engine and Kanban tasks run on. Switching affects all future runs."
+        >
+          <div
+            role="radiogroup"
+            aria-label="Engine provider"
+            className="flex flex-col gap-2"
+          >
+            <ProviderCard
+              value="claude-cli"
+              selected={draft.engineProvider === "claude-cli"}
+              onSelect={() => void selectProvider("claude-cli")}
+              title="Subscription — claude CLI"
+              pill={cliPill}
+              description={
+                <>
+                  Spawns the local{" "}
+                  <code className="font-mono text-foreground/70">claude</code>{" "}
+                  binary as a headless PTY and reuses your existing Claude Code
+                  auth. Free if you already have a subscription.
+                </>
+              }
+            />
+            <ProviderCard
+              value="claude-code"
+              selected={draft.engineProvider === "claude-code"}
+              onSelect={() => void selectProvider("claude-code")}
+              title="API key — Anthropic SDK"
+              description={
+                <>
+                  Uses{" "}
+                  <code className="font-mono text-foreground/70">
+                    @anthropic-ai/claude-agent-sdk
+                  </code>{" "}
+                  and bills per token. Requires the API key above.
+                </>
+              }
+            />
+          </div>
+        </SectionCard>
+
+        {/* ------------------------------ Models ------------------------------ */}
+        <SectionCard
+          id="section-models"
+          title="Default models"
+          description="Which model each part of Hive picks by default. The options come from the model catalog below."
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Engine model"
+              htmlFor="engine_default_model"
+              error={validation.engine_default_model ?? null}
+            >
+              <Select
+                id="engine_default_model"
+                value={draft.engineModel}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, engineModel: e.target.value }))
+                }
+              >
+                <option value="">Select a model…</option>
+                {draft.engineModel !== "" &&
+                !engineOptions.some((m) => m.id === draft.engineModel) ? (
+                  <option value={draft.engineModel}>
+                    {draft.engineModel} (not in catalog)
+                  </option>
+                ) : null}
+                {engineOptions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} ({m.id})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label="Assistant model"
+              htmlFor="assistant_default_model"
+              error={validation.assistant_default_model ?? null}
+            >
+              <Select
+                id="assistant_default_model"
+                value={draft.assistantModel}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, assistantModel: e.target.value }))
+                }
+              >
+                <option value="">Select a model…</option>
+                {draft.assistantModel !== "" &&
+                !assistantOptions.some(
+                  (m) => m.id === draft.assistantModel,
+                ) ? (
+                  <option value={draft.assistantModel}>
+                    {draft.assistantModel} (not in catalog)
+                  </option>
+                ) : null}
+                {assistantOptions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} ({m.id})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        </SectionCard>
+
+        {/* --------------------------- Model catalog --------------------------- */}
+        <SectionCard
+          id="section-catalog"
+          title="Model catalog"
+          description={
+            <>
+              The models offered in the dropdowns above.{" "}
+              <code className="font-mono text-foreground/70">kind</code>{" "}
+              decides where a model appears: engine for runs, assistant for
+              chat.
+            </>
+          }
+        >
+          <CatalogTable
+            rows={draft.catalog}
+            onChange={(rows) => setDraft((d) => ({ ...d, catalog: rows }))}
+            error={validation.models_catalog ?? null}
+          />
+          {validation.models_catalog ? (
+            <p className="mt-2 text-xs text-destructive">
+              {validation.models_catalog}
+            </p>
+          ) : null}
+        </SectionCard>
+
+        {/* ----------------------------- Scheduler ----------------------------- */}
+        <SectionCard
+          id="section-scheduler"
+          title="Scheduler"
+          description="Background automation that keeps stale projects moving."
+        >
+          <Field
+            label="Auto-nudge stale projects after"
+            htmlFor="auto_nudge"
+            error={validation.auto_nudge_after_days ?? null}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                id="auto_nudge"
+                type="number"
+                min={1}
+                max={90}
+                inputMode="numeric"
+                value={draft.autoNudge}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, autoNudge: e.target.value }))
+                }
+                className={`${inputClass} w-24 font-mono`}
+              />
+              <span className="text-[13px] text-muted-foreground">days</span>
+            </div>
+          </Field>
+        </SectionCard>
+
+        {/* ----------------------------- MCP servers ---------------------------- */}
+        <SectionCard
+          id="section-mcp"
+          title="MCP servers"
+          description="Which MCP servers Hive can expose to agent profiles. Changes apply when you save."
+        >
+          <ul className="divide-y divide-border">
+            {mcpCatalog.map((m) => {
+              const on = draft.enabledMcp.includes(m.id);
+              return (
+                <li
+                  key={m.id}
+                  className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-baseline gap-2 text-sm text-foreground">
+                      {m.label}
+                      <code className="font-mono text-[11px] text-faint">
+                        {m.id}
+                      </code>
+                    </p>
+                    <p className="mt-0.5 max-w-xl text-xs leading-relaxed text-muted-foreground">
+                      {m.description}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] text-faint">
+                      {m.configHint}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={on}
+                    onChange={() => toggleMcp(m.id)}
+                    ariaLabel={`Enable ${m.label}`}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
+      </div>
+
+      {/* ---------------- barra flotante de cambios sin guardar ---------------- */}
+      {dirtyKeys.length > 0 ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center pl-[264px] pr-6">
+          <div
+            role="status"
+            aria-live="polite"
+            className="glass animate-overlay pointer-events-auto flex max-w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-4 py-2.5 shadow-overlay"
+          >
+            <span
+              aria-hidden="true"
+              className="ai-pulse h-2 w-2 shrink-0 rounded-full bg-primary"
+            />
+            <p className="text-[13px] font-medium text-foreground">
+              {dirtyKeys.length} unsaved{" "}
+              {dirtyKeys.length === 1 ? "change" : "changes"}
+            </p>
+            {hasErrors ? (
+              <p className="text-xs text-destructive">
+                Fix the highlighted fields first
+              </p>
+            ) : (
+              <span className="keycap hidden sm:inline-block">⌘S</span>
+            )}
+            <div className="ml-1 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={discardAll}
+                disabled={savingAll}
+                className={`${secondaryButtonClass} h-8`}
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveAll()}
+                disabled={savingAll || hasErrors}
+                className={`${primaryButtonClass} h-8`}
+              >
+                {savingAll ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function SavedPill() {
-  return (
-    <span className="font-mono text-[10px] tracking-widest text-hive-green border border-hive-border px-2 py-1">
-      SAVED
-    </span>
-  );
-}
+/* --------------------------- radio card de provider ------------------------ */
 
-function KeyStatusPill({ present }: { present: boolean }) {
+type ProviderCardProps = {
+  value: EngineProviderId;
+  selected: boolean;
+  onSelect: () => void;
+  title: string;
+  description: React.ReactNode;
+  pill?: React.ReactNode;
+};
+
+function ProviderCard({
+  value,
+  selected,
+  onSelect,
+  title,
+  description,
+  pill,
+}: ProviderCardProps) {
   return (
-    <span
-      className={`font-mono text-[10px] tracking-widest border px-2 py-1 ${
-        present
-          ? "text-hive-green border-hive-border"
-          : "text-hive-amber border-hive-border"
+    <label
+      className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors duration-[120ms] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary ${
+        selected
+          ? "border-primary/50 bg-primary-soft"
+          : "border-border bg-background/40 hover:border-border-strong hover:bg-surface-2/60"
       }`}
     >
-      {present ? "CONFIGURED" : "NOT CONFIGURED"}
-    </span>
+      <input
+        type="radio"
+        name="engine_provider"
+        value={value}
+        checked={selected}
+        onChange={onSelect}
+        className="sr-only"
+      />
+      <span
+        aria-hidden="true"
+        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors duration-[120ms] ${
+          selected ? "border-primary" : "border-border-strong"
+        }`}
+      >
+        {selected ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
+          {title}
+          {pill}
+        </span>
+        <span className="mt-1 block max-w-xl text-xs leading-relaxed text-muted-foreground">
+          {description}
+        </span>
+      </span>
+    </label>
   );
 }

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import { getAppConfig } from "@/lib/appConfig";
 import { getMcpCatalog } from "@/lib/mcp/catalog";
 import {
@@ -6,7 +7,8 @@ import {
   getEngineProvider,
 } from "@/lib/settings";
 
-import { SettingsForm, type SettingsInitial } from "./SettingsForm";
+import { SettingsForm } from "./SettingsForm";
+import type { SettingsInitial } from "./types";
 
 export const dynamic = "force-dynamic";
 
@@ -31,16 +33,13 @@ export default function SettingsPage() {
   };
 
   return (
-    <section className="max-w-3xl">
-      <header className="mb-4">
-        <h1 className="font-mono text-xs tracking-widest text-hive-amber">
-          [ SETTINGS ]
-        </h1>
-        <p className="mt-1 text-[11px] text-hive-muted">
-          Every Hive knob lives here. No config files to edit.
-        </p>
-      </header>
+    <div className="mx-auto max-w-5xl">
+      <PageHeader
+        overline="Settings"
+        title="Settings"
+        description="Keys, engine, models, scheduling and MCP — every Hive knob lives here. No config files to edit."
+      />
       <SettingsForm initial={initial} mcpCatalog={mcpCatalog} />
-    </section>
+    </div>
   );
 }
