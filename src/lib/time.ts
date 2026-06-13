@@ -37,6 +37,17 @@ export function formatRelative(iso: string): string {
   return past ? `${years}y ago` : `in ${years}y`;
 }
 
+/** True when the ISO timestamp is already in the past. */
+export function isOverdue(iso: string): boolean {
+  const ts = Date.parse(iso);
+  return !Number.isNaN(ts) && ts < Date.now();
+}
+
+/** Milliseconds elapsed since the given epoch timestamp (never negative). */
+export function msSince(epochMs: number): number {
+  return Math.max(0, Date.now() - epochMs);
+}
+
 export function formatIso(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
