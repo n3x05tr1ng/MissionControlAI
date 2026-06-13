@@ -2,11 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 
-import type {
-  AgentProfile,
-  PermissionMode,
-} from "@/lib/contracts";
+import type { AgentProfile, PermissionMode } from "@/lib/contracts";
 import type { ModelCatalogEntry } from "@/lib/settings";
 import type { McpCatalogEntry } from "@/lib/mcp/catalog";
 import {
@@ -55,6 +53,34 @@ const PERMISSION_OPTIONS: Array<{
   },
 ];
 
+/* ----------------------------- recetas de estilo ----------------------------- */
+
+const inputClass =
+  "h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-faint";
+const labelClass = "text-xs font-medium text-muted-foreground";
+const secondaryBtn =
+  "h-9 rounded-md border border-border bg-surface-2 px-3 text-[13px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground disabled:opacity-50";
+
+function Section({
+  title,
+  aside,
+  children,
+}: {
+  title: string;
+  aside?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="hive-card flex flex-col gap-3 p-4">
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xs font-medium text-muted-foreground">{title}</h2>
+        {aside}
+      </header>
+      {children}
+    </section>
+  );
+}
+
 type Props = {
   profile: AgentProfile;
   models: ModelCatalogEntry[];
@@ -91,7 +117,8 @@ export function ProfileEditor({ profile, models, mcpCatalog }: Props) {
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
   const modelOptions = useMemo(() => {
-    if (models.length === 0) return [{ id: profile.model, label: profile.model, kind: "engine" as const }];
+    if (models.length === 0)
+      return [{ id: profile.model, label: profile.model, kind: "engine" as const }];
     return models;
   }, [models, profile.model]);
 
@@ -213,35 +240,39 @@ export function ProfileEditor({ profile, models, mcpCatalog }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between border-b border-hive-border pb-3">
-        <div className="flex items-center gap-3">
+    <div className="flex flex-col gap-6">
+      {/* Cabecera de página (patrón PageHeader + tile de identidad en vivo) */}
+      <header className="animate-enter flex flex-wrap items-end justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           <div
-            className="flex h-10 w-10 items-center justify-center border border-hive-border"
-            style={{ color }}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border"
+            style={{
+              color,
+              borderColor: `color-mix(in srgb, ${color} 35%, transparent)`,
+              background: `color-mix(in srgb, ${color} 12%, transparent)`,
+            }}
           >
-            <ProfileIcon name={icon} size={22} />
+            <ProfileIcon name={icon} size={24} />
           </div>
-          <div>
-            <h1 className="font-sans text-lg text-hive-text">{name || profile.name}</h1>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+          <div className="flex min-w-0 flex-col gap-1">
+            <p className="hive-overline">[ PROFILE ]</p>
+            <h1 className="hive-h1 truncate">{name || profile.name}</h1>
+            <p className="font-mono text-[11px] text-faint">
               {profile.id}
               {profile.isTemplate ? " · template" : ""}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {okMsg ? (
-            <span className="font-mono text-[10px] text-green-400">{okMsg}</span>
+            <span className="text-xs font-medium text-success">{okMsg}</span>
           ) : null}
-          {error ? (
-            <span className="font-mono text-[10px] text-red-400">{error}</span>
-          ) : null}
+          {error ? <span className="text-xs text-destructive">{error}</span> : null}
           <button
             type="button"
             onClick={duplicate}
             disabled={busy}
-            className="border border-hive-border px-3 py-1 text-xs uppercase tracking-widest text-hive-muted hover:text-hive-text disabled:opacity-50"
+            className={secondaryBtn}
           >
             Duplicate
           </button>
@@ -249,7 +280,7 @@ export function ProfileEditor({ profile, models, mcpCatalog }: Props) {
             type="button"
             onClick={exportProfile}
             disabled={busy}
-            className="border border-hive-border px-3 py-1 text-xs uppercase tracking-widest text-hive-muted hover:text-hive-text disabled:opacity-50"
+            className={secondaryBtn}
           >
             Export
           </button>
@@ -257,7 +288,7 @@ export function ProfileEditor({ profile, models, mcpCatalog }: Props) {
             type="button"
             onClick={destroy}
             disabled={busy}
-            className="border border-red-500/50 px-3 py-1 text-xs uppercase tracking-widest text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+            className="h-9 rounded-md border border-destructive/40 bg-destructive-soft px-3 text-[13px] font-medium text-destructive hover:bg-destructive/25 disabled:opacity-50"
           >
             Delete
           </button>
@@ -265,108 +296,98 @@ export function ProfileEditor({ profile, models, mcpCatalog }: Props) {
             type="button"
             onClick={save}
             disabled={busy}
-            className="border border-hive-amber bg-hive-amber/10 px-3 py-1 text-xs uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20 disabled:opacity-50"
+            className="h-9 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-primary-hover hover:shadow-glow disabled:opacity-50"
           >
-            {busy ? "saving…" : "Save"}
+            {busy ? "Saving…" : "Save changes"}
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <div className="flex flex-col gap-3 lg:col-span-3">
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Name
-            </span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Description
-            </span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-            />
-          </label>
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
+        {/* Columna principal */}
+        <div className="stagger-children flex flex-col gap-4 lg:col-span-3">
+          <Section title="Identity">
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>Name</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>Description</span>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                placeholder="What is this agent for?"
+                className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-faint"
+              />
+            </label>
+          </Section>
 
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                System prompt
-              </span>
+          <Section
+            title="System prompt"
+            aside={
               <div className="flex items-center gap-3">
-                <span className="font-mono text-[10px] text-hive-muted">
+                <span className="font-mono text-[11px] text-faint">
                   {systemPrompt.length} chars
                 </span>
-                <div className="flex border border-hive-border">
+                <div className="flex items-center gap-0.5 rounded-md border border-border bg-surface-2 p-0.5">
                   <button
                     type="button"
                     onClick={() => setTab("edit")}
-                    className={`px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest ${tab === "edit" ? "bg-hive-amber/20 text-hive-amber" : "text-hive-muted"}`}
+                    aria-pressed={tab === "edit"}
+                    className={`rounded-xs px-2.5 py-0.5 text-xs font-medium ${
+                      tab === "edit"
+                        ? "bg-surface-3 text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     Edit
                   </button>
                   <button
                     type="button"
                     onClick={() => setTab("preview")}
-                    className={`px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest border-l border-hive-border ${tab === "preview" ? "bg-hive-amber/20 text-hive-amber" : "text-hive-muted"}`}
+                    aria-pressed={tab === "preview"}
+                    className={`rounded-xs px-2.5 py-0.5 text-xs font-medium ${
+                      tab === "preview"
+                        ? "bg-surface-3 text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     Preview
                   </button>
                 </div>
               </div>
-            </div>
+            }
+          >
             {tab === "edit" ? (
               <textarea
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 rows={14}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-xs text-hive-text font-mono"
+                placeholder="You are…"
+                className="min-h-[20rem] rounded-md border border-input bg-background px-3 py-2 font-mono text-[12.5px] leading-relaxed text-foreground placeholder:text-faint"
               />
             ) : (
-              <pre className="bg-hive-bg border border-hive-border px-2 py-1 text-xs text-hive-text font-mono whitespace-pre-wrap min-h-[18rem]">
+              <pre className="min-h-[20rem] whitespace-pre-wrap rounded-md border border-border bg-background px-3 py-2 font-mono text-[12.5px] leading-relaxed text-muted-foreground">
                 {systemPrompt || "(empty)"}
               </pre>
             )}
-          </div>
+          </Section>
 
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Model
-            </span>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-            >
-              {modelOptions.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label} ({m.id})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Permission mode
-            </span>
-            <div className="flex flex-col gap-1">
+          <Section title="Permission mode">
+            <div className="flex flex-col gap-2">
               {PERMISSION_OPTIONS.map((opt) => (
                 <label
                   key={opt.value}
-                  className={`flex items-start gap-2 border px-2 py-1.5 cursor-pointer ${
+                  className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors duration-150 ${
                     permissionMode === opt.value
-                      ? "border-hive-amber bg-hive-amber/10"
-                      : "border-hive-border hover:border-hive-amber/40"
+                      ? "border-primary/50 bg-primary-soft"
+                      : "border-border hover:border-border-strong hover:bg-surface-2"
                   }`}
                 >
                   <input
@@ -375,70 +396,85 @@ export function ProfileEditor({ profile, models, mcpCatalog }: Props) {
                     value={opt.value}
                     checked={permissionMode === opt.value}
                     onChange={() => setPermissionMode(opt.value)}
-                    className="mt-0.5 accent-hive-amber"
+                    className="mt-1 accent-primary"
                   />
-                  <div className="flex flex-col">
-                    <span className="text-sm text-hive-text">{opt.label}</span>
-                    <span className="text-xs text-hive-muted">{opt.hint}</span>
-                  </div>
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium text-foreground">
+                      {opt.label}
+                    </span>
+                    <span className="text-xs leading-relaxed text-muted-foreground">
+                      {opt.hint}
+                    </span>
+                  </span>
                 </label>
               ))}
             </div>
-          </div>
+          </Section>
         </div>
 
-        <div className="flex flex-col gap-3 lg:col-span-2">
-          <div className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Icon
-            </span>
-            <div className="grid grid-cols-5 gap-1">
-              {PROFILE_ICON_NAMES.map((n) => (
-                <button
-                  type="button"
-                  key={n}
-                  onClick={() => setIcon(n)}
-                  className={`flex h-10 items-center justify-center border ${
-                    icon === n
-                      ? "border-hive-amber ring-1 ring-hive-amber"
-                      : "border-hive-border hover:border-hive-amber/50"
-                  }`}
-                  style={{ color }}
-                  aria-label={n}
-                >
-                  <ProfileIcon name={n} size={18} />
-                </button>
-              ))}
+        {/* Columna lateral */}
+        <div className="stagger-children flex flex-col gap-4 lg:col-span-2">
+          <Section title="Appearance">
+            <div className="flex flex-col gap-1.5">
+              <span className={labelClass}>Icon</span>
+              <div className="grid grid-cols-5 gap-1.5">
+                {PROFILE_ICON_NAMES.map((n) => (
+                  <button
+                    type="button"
+                    key={n}
+                    onClick={() => setIcon(n)}
+                    aria-label={n}
+                    aria-pressed={icon === n}
+                    className={`flex h-10 items-center justify-center rounded-md border ${
+                      icon === n
+                        ? "border-primary bg-primary-soft"
+                        : "border-border hover:border-border-strong hover:bg-surface-2"
+                    }`}
+                    style={{ color }}
+                  >
+                    <ProfileIcon name={n} size={18} />
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Color
-            </span>
-            <div className="grid grid-cols-5 gap-1">
-              {PROFILE_COLOR_SWATCHES.map((c) => (
-                <button
-                  type="button"
-                  key={c}
-                  onClick={() => setColor(c)}
-                  className={`h-8 border ${
-                    color === c
-                      ? "border-hive-amber ring-1 ring-hive-amber"
-                      : "border-hive-border"
-                  }`}
-                  style={{ backgroundColor: c }}
-                  aria-label={c}
-                />
-              ))}
+            <div className="flex flex-col gap-1.5">
+              <span className={labelClass}>Color</span>
+              <div className="grid grid-cols-5 gap-1.5">
+                {PROFILE_COLOR_SWATCHES.map((c) => (
+                  <button
+                    type="button"
+                    key={c}
+                    onClick={() => setColor(c)}
+                    aria-label={c}
+                    aria-pressed={color === c}
+                    className={`h-8 rounded-md border border-border ${
+                      color === c
+                        ? "ring-2 ring-primary ring-offset-2 ring-offset-surface-1"
+                        : ""
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          </Section>
 
-          <div className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Allowed tools
-            </span>
-            <div className="flex flex-wrap gap-1">
+          <Section title="Model">
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            >
+              {modelOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} ({m.id})
+                </option>
+              ))}
+            </select>
+          </Section>
+
+          <Section title="Allowed tools">
+            <div className="flex flex-wrap gap-1.5">
               {ALLOWED_TOOL_CHOICES.map((t) => {
                 const on = allowedTools.includes(t);
                 return (
@@ -446,10 +482,11 @@ export function ProfileEditor({ profile, models, mcpCatalog }: Props) {
                     type="button"
                     key={t}
                     onClick={() => toggleTool(t)}
-                    className={`font-mono text-[10px] uppercase tracking-widest px-2 py-1 border ${
+                    aria-pressed={on}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium ${
                       on
-                        ? "border-hive-amber bg-hive-amber/15 text-hive-amber"
-                        : "border-hive-border text-hive-muted hover:text-hive-text"
+                        ? "border-primary/40 bg-primary-soft text-primary"
+                        : "border-border bg-surface-2 text-muted-foreground hover:bg-surface-3 hover:text-foreground"
                     }`}
                   >
                     {t}
@@ -457,84 +494,83 @@ export function ProfileEditor({ profile, models, mcpCatalog }: Props) {
                 );
               })}
             </div>
-          </div>
+          </Section>
 
-          <div className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              MCP servers
-            </span>
-            <div className="flex flex-col gap-1 max-h-48 overflow-y-auto border border-hive-border p-1">
+          <Section title="MCP servers">
+            <div className="flex max-h-60 flex-col overflow-y-auto rounded-md border border-border">
               {mcpCatalog.map((m) => {
                 const on = mcpServers.includes(m.id);
                 return (
                   <label
                     key={m.id}
-                    className="flex items-start gap-2 px-1.5 py-1 hover:bg-hive-bg/40 cursor-pointer"
+                    className="flex cursor-pointer items-start gap-2.5 border-b border-border px-3 py-2 last:border-b-0 hover:bg-surface-2"
                   >
                     <input
                       type="checkbox"
                       checked={on}
                       onChange={() => toggleMcp(m.id)}
-                      className="mt-0.5 accent-hive-amber"
+                      className="mt-0.5 accent-primary"
                     />
-                    <div className="flex flex-col">
-                      <span className="text-xs text-hive-text">{m.label}</span>
-                      <span className="text-[10px] text-hive-muted">{m.description}</span>
-                    </div>
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-[13px] text-foreground">{m.label}</span>
+                      <span className="text-xs leading-relaxed text-muted-foreground">
+                        {m.description}
+                      </span>
+                    </span>
                   </label>
                 );
               })}
             </div>
-            <span className="font-mono text-[10px] text-hive-muted">
-              MCP runtime wiring is a stub in v0.3 — toggles persist but tools are not yet bound.
-            </span>
-          </div>
+            <p className="text-[11px] leading-relaxed text-faint">
+              MCP runtime wiring is a stub in v0.3 — toggles persist but tools
+              are not yet bound.
+            </p>
+          </Section>
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                Cost cap (USD)
-              </span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={costCap}
-                placeholder="no cap"
-                onChange={(e) => setCostCap(e.target.value)}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                Time cap (seconds)
-              </span>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={timeCap}
-                placeholder="no cap"
-                onChange={(e) => setTimeCap(e.target.value)}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-              />
-            </label>
-          </div>
-
-          <label className="flex items-center gap-2 border border-hive-border px-2 py-2">
-            <input
-              type="checkbox"
-              checked={sandbox}
-              onChange={(e) => setSandbox(e.target.checked)}
-              className="accent-hive-amber"
-            />
-            <div className="flex flex-col">
-              <span className="text-sm text-hive-text">Sandbox</span>
-              <span className="text-[10px] text-hive-muted">
-                Reserved for future per-profile sandboxing.
-              </span>
+          <Section title="Limits">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1.5">
+                <span className={labelClass}>Cost cap (USD)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={costCap}
+                  placeholder="No cap"
+                  onChange={(e) => setCostCap(e.target.value)}
+                  className={inputClass}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className={labelClass}>Time cap (seconds)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={timeCap}
+                  placeholder="No cap"
+                  onChange={(e) => setTimeCap(e.target.value)}
+                  className={inputClass}
+                />
+              </label>
             </div>
-          </label>
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border p-3 hover:bg-surface-2">
+              <input
+                type="checkbox"
+                checked={sandbox}
+                onChange={(e) => setSandbox(e.target.checked)}
+                className="mt-0.5 accent-primary"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="text-[13px] font-medium text-foreground">
+                  Sandbox
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Reserved for future per-profile sandboxing.
+                </span>
+              </span>
+            </label>
+          </Section>
         </div>
       </div>
     </div>

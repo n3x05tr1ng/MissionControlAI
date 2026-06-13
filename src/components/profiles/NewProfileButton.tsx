@@ -1,17 +1,69 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { notify } from "@/lib/ui/notify";
 
-export function NewProfileButton() {
+const primaryBtn =
+  "inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-primary-hover hover:shadow-glow disabled:opacity-50";
+const secondaryBtn =
+  "inline-flex h-9 items-center rounded-md border border-border bg-surface-2 px-3 text-[13px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground disabled:opacity-50";
+
+function PlusIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+type Props = {
+  /** Abre el diálogo de creación al llegar con /profiles?new=1 (modalBus). */
+  autoOpenCreate?: boolean;
+};
+
+export function NewProfileButton({ autoOpenCreate = false }: Props) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(autoOpenCreate);
   const [name, setName] = useState("");
+
+  // Sincroniza el deep-link ?new=1 durante el render (patrón "derive state
+  // from props"), evitando setState dentro de un efecto.
+  const [prevAutoOpen, setPrevAutoOpen] = useState(autoOpenCreate);
+  if (autoOpenCreate !== prevAutoOpen) {
+    setPrevAutoOpen(autoOpenCreate);
+    if (autoOpenCreate) setShowCreate(true);
+  }
+
+  const closeCreate = useCallback(() => {
+    setShowCreate(false);
+    setName("");
+    setError(null);
+    // Limpia el deep-link ?new=1 para que recargar no re-abra el diálogo.
+    if (autoOpenCreate) router.replace("/profiles", { scroll: false });
+  }, [autoOpenCreate, router]);
+
+  useEffect(() => {
+    if (!showCreate) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !busy) closeCreate();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showCreate, busy, closeCreate]);
 
   async function createBlank(e: React.FormEvent) {
     e.preventDefault();
@@ -76,18 +128,19 @@ export function NewProfileButton() {
     <div className="flex items-center gap-2">
       <button
         type="button"
-        onClick={() => setShowCreate(true)}
-        className="border border-hive-amber bg-hive-amber/10 px-3 py-1 text-xs uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20"
+        onClick={() => fileRef.current?.click()}
+        disabled={busy}
+        className={secondaryBtn}
       >
-        + New profile
+        Import
       </button>
       <button
         type="button"
-        onClick={() => fileRef.current?.click()}
-        disabled={busy}
-        className="border border-hive-border px-3 py-1 text-xs uppercase tracking-widest text-hive-muted hover:text-hive-text disabled:opacity-50"
+        onClick={() => setShowCreate(true)}
+        className={primaryBtn}
       >
-        Import
+        <PlusIcon />
+        New profile
       </button>
       <input
         ref={fileRef}
@@ -96,53 +149,64 @@ export function NewProfileButton() {
         onChange={onImportFile}
         className="hidden"
       />
-      {error ? (
-        <span className="font-mono text-[10px] text-red-400">{error}</span>
+      {error && !showCreate ? (
+        <span className="text-xs text-destructive">{error}</span>
       ) : null}
 
       {showCreate ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => !busy && setShowCreate(false)}
+          className="hive-modal-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]"
+          onClick={() => !busy && closeCreate()}
         >
           <form
             onSubmit={createBlank}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md border border-hive-border bg-hive-panel p-4 flex flex-col gap-3"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-profile-title"
+            className="glass animate-overlay flex w-full max-w-md flex-col gap-4 rounded-xl p-5 shadow-overlay"
           >
-            <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-              [ NEW PROFILE ]
-            </h2>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+            <div className="flex flex-col gap-1">
+              <h2
+                id="new-profile-title"
+                className="text-[15px] font-semibold text-foreground"
+              >
+                New profile
+              </h2>
+              <p className="text-[13px] leading-relaxed text-muted-foreground">
+                Name it now — you can shape the prompt, model, tools and
+                permissions in the editor.
+              </p>
+            </div>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
                 Name
               </span>
               <input
                 type="text"
                 value={name}
                 onChange={(ev) => setName(ev.target.value)}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
+                placeholder="e.g. Code reviewer"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-faint"
                 autoFocus
               />
             </label>
-            {error ? (
-              <p className="text-xs text-red-400 font-mono">{error}</p>
-            ) : null}
-            <div className="flex justify-end gap-2 pt-2">
+            {error ? <p className="text-xs text-destructive">{error}</p> : null}
+            <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => setShowCreate(false)}
+                onClick={closeCreate}
                 disabled={busy}
-                className="border border-hive-border px-3 py-1 text-xs uppercase tracking-widest text-hive-muted hover:text-hive-text"
+                className="h-8 rounded-md border border-border bg-surface-2 px-3 text-[13px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground disabled:opacity-50"
               >
-                cancel
+                Cancel
               </button>
               <button
                 type="submit"
                 disabled={busy}
-                className="border border-hive-amber bg-hive-amber/10 px-3 py-1 text-xs uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20 disabled:opacity-50"
+                className="h-8 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50"
               >
-                {busy ? "creating…" : "create"}
+                {busy ? "Creating…" : "Create profile"}
               </button>
             </div>
           </form>

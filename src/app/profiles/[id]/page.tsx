@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { ProfileEditor } from "@/components/profiles/ProfileEditor";
 import { UsageStats } from "@/components/stats/UsageStats";
 import { getMcpCatalog } from "@/lib/mcp/catalog";
@@ -11,28 +13,47 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }> };
 
+function BackLink() {
+  return (
+    <nav className="animate-enter mb-4">
+      <Link
+        href="/profiles"
+        className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        All profiles
+      </Link>
+    </nav>
+  );
+}
+
 export default async function ProfilePage({ params }: Props) {
   const { id } = await params;
   const profile = getProfile(id);
+
   if (!profile) {
     return (
-      <section className="max-w-[1200px]">
-        <header className="mb-6">
-          <h1 className="font-mono text-xs tracking-widest text-hive-amber">
-            [ PROFILE NOT FOUND ]
-          </h1>
-        </header>
-        <div className="border border-hive-border bg-hive-panel p-6 text-sm text-hive-muted">
-          No profile with id <span className="font-mono text-hive-text">{id}</span>.
-          <div className="mt-3">
-            <Link
-              href="/profiles"
-              className="font-mono text-[11px] uppercase tracking-widest text-hive-amber hover:underline"
-            >
-              ← back to profiles
-            </Link>
-          </div>
-        </div>
+      <section className="mx-auto max-w-7xl">
+        <BackLink />
+        <PageHeader overline="Profiles" title="Profile not found" />
+        <EmptyState
+          illustration="folder"
+          title="This profile doesn't exist"
+          description={`We couldn't find a profile with id "${id}". It may have been deleted or the link is outdated.`}
+          cta={{ label: "Back to profiles", href: "/profiles" }}
+        />
       </section>
     );
   }
@@ -42,19 +63,12 @@ export default async function ProfilePage({ params }: Props) {
   const stats = usageByProfile(id);
 
   return (
-    <section className="max-w-[1200px]">
-      <header className="mb-4">
-        <Link
-          href="/profiles"
-          className="font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber"
-        >
-          ← profiles
-        </Link>
-      </header>
-      <div className="mb-6">
+    <section className="mx-auto max-w-7xl">
+      <BackLink />
+      <ProfileEditor profile={profile} models={models} mcpCatalog={mcpCatalog} />
+      <div className="animate-enter mt-8">
         <UsageStats stats={stats} />
       </div>
-      <ProfileEditor profile={profile} models={models} mcpCatalog={mcpCatalog} />
     </section>
   );
 }
