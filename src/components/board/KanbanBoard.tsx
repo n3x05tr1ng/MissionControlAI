@@ -26,16 +26,21 @@ import { EditTaskModal } from "./EditTaskModal";
 import { NewTaskModal } from "./NewTaskModal";
 
 const COLUMN_LABELS: Record<TaskStatus, string> = {
-  backlog: "BACKLOG",
-  ready: "READY",
-  running: "RUNNING",
-  review: "REVIEW",
-  done: "DONE",
+  backlog: "Backlog",
+  ready: "Ready",
+  running: "Running",
+  review: "Review",
+  done: "Done",
 };
 
 type Props = {
+  /** Proyecto FIJADO (modo embebido en la página de proyecto). */
   projectId?: string;
   compact?: boolean;
+  /** Deep-link (?status=…): muestra solo esa columna; filtro descartable. */
+  initialStatus?: TaskStatus;
+  /** Deep-link (?projectId=…): filtro de proyecto descartable (se ignora si projectId está fijado). */
+  initialProjectId?: string;
 };
 
 type StreamFrame =
@@ -51,7 +56,70 @@ function isTaskStatus(s: string): s is TaskStatus {
 // Dedup window for echoes of our own optimistic mutations.
 const LOCAL_ECHO_MS = 500;
 
-export function KanbanBoard({ projectId, compact }: Props) {
+function ClearIcon() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function FilterPill({
+  label,
+  clearLabel,
+  onClear,
+}: {
+  label: string;
+  clearLabel: string;
+  onClear: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary-soft py-0.5 pl-2.5 pr-1 font-mono text-[11px] text-primary">
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={clearLabel}
+        className="rounded-full p-0.5 hover:bg-primary/20"
+      >
+        <ClearIcon />
+      </button>
+    </span>
+  );
+}
+
+export function KanbanBoard({
+  projectId,
+  compact,
+  initialStatus,
+  initialProjectId,
+}: Props) {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [projects, setProjects] = useState<ProjectConfig[]>([]);
@@ -61,8 +129,18 @@ export function KanbanBoard({ projectId, compact }: Props) {
   const [recurrenceFilter, setRecurrenceFilter] = useState<
     "all" | "recurring" | "one-shot"
   >("all");
+  // Filtros descartables que llegan por deep-link (?status / ?projectId).
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(
+    initialStatus ?? null,
+  );
+  const [projectFilter, setProjectFilter] = useState<string | null>(
+    projectId ? null : (initialProjectId ?? null),
+  );
+
   const tasksRef = useRef<TaskRow[]>([]);
-  tasksRef.current = tasks;
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
 
   // Track recent local-origin mutations by task id so the SSE echo can be
   // ignored briefly and not clobber our optimistic state.
@@ -88,15 +166,21 @@ export function KanbanBoard({ projectId, compact }: Props) {
     return map;
   }, [projects]);
 
-  const fetchProjects = useCallback(async (): Promise<void> => {
-    try {
-      const res = await fetch("/api/projects");
-      if (!res.ok) return;
-      const snaps = (await res.json()) as Array<{ config: ProjectConfig }>;
-      setProjects(snaps.map((s) => s.config));
-    } catch {
-      // ignore
-    }
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/projects");
+        if (!res.ok) return;
+        const snaps = (await res.json()) as Array<{ config: ProjectConfig }>;
+        if (!cancelled) setProjects(snaps.map((s) => s.config));
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filterForProject = useCallback(
@@ -106,10 +190,6 @@ export function KanbanBoard({ projectId, compact }: Props) {
     },
     [projectId],
   );
-
-  useEffect(() => {
-    void fetchProjects();
-  }, [fetchProjects]);
 
   // SSE subscription (replaces 4s polling). Fallback to a single fetch if
   // EventSource is unavailable (older browsers / SSR).
@@ -182,6 +262,7 @@ export function KanbanBoard({ projectId, compact }: Props) {
 
   const visibleTasks = useMemo(() => {
     return tasks.filter((t) => {
+      if (projectFilter && t.project_id !== projectFilter) return false;
       if (!showTemplates && t.recurring_template === 1) return false;
       const isRecurring =
         t.recurring_template === 1 || t.schedule !== null;
@@ -189,7 +270,7 @@ export function KanbanBoard({ projectId, compact }: Props) {
       if (recurrenceFilter === "one-shot" && isRecurring) return false;
       return true;
     });
-  }, [tasks, showTemplates, recurrenceFilter]);
+  }, [tasks, showTemplates, recurrenceFilter, projectFilter]);
 
   const tasksByStatus = useMemo(() => {
     const grouped: Record<TaskStatus, TaskRow[]> = {
@@ -207,6 +288,10 @@ export function KanbanBoard({ projectId, compact }: Props) {
     }
     return grouped;
   }, [visibleTasks]);
+
+  const visibleStatuses: readonly TaskStatus[] = statusFilter
+    ? [statusFilter]
+    : TASK_STATUSES;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -289,7 +374,43 @@ export function KanbanBoard({ projectId, compact }: Props) {
     return 1;
   }
 
-  const filterChips: Array<{ id: "all" | "recurring" | "one-shot"; label: string }> = [
+  // Mantiene la URL en sync al descartar filtros de deep-link (sin navegar).
+  const syncFiltersToUrl = useCallback(
+    (status: TaskStatus | null, project: string | null) => {
+      if (typeof window === "undefined") return;
+      const url = new URL(window.location.href);
+      if (status) url.searchParams.set("status", status);
+      else url.searchParams.delete("status");
+      if (project) url.searchParams.set("projectId", project);
+      else url.searchParams.delete("projectId");
+      window.history.replaceState(window.history.state, "", url.toString());
+    },
+    [],
+  );
+
+  function clearStatusFilter() {
+    setStatusFilter(null);
+    syncFiltersToUrl(null, projectFilter);
+  }
+
+  function clearProjectFilter() {
+    setProjectFilter(null);
+    syncFiltersToUrl(statusFilter, null);
+  }
+
+  function clearAllFilters() {
+    setStatusFilter(null);
+    setProjectFilter(null);
+    setRecurrenceFilter("all");
+    syncFiltersToUrl(null, null);
+  }
+
+  const hasDeepLinkFilters = statusFilter !== null || projectFilter !== null;
+
+  const filterChips: Array<{
+    id: "all" | "recurring" | "one-shot";
+    label: string;
+  }> = [
     { id: "all", label: "All" },
     { id: "recurring", label: "Recurring" },
     { id: "one-shot", label: "One-shot" },
@@ -299,18 +420,23 @@ export function KanbanBoard({ projectId, compact }: Props) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1">
+          <div
+            role="group"
+            aria-label="Recurrence filter"
+            className="inline-flex items-center rounded-md border border-border bg-surface-1 p-0.5"
+          >
             {filterChips.map((chip) => {
               const active = recurrenceFilter === chip.id;
               return (
                 <button
                   key={chip.id}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => setRecurrenceFilter(chip.id)}
-                  className={`font-mono text-[10px] uppercase tracking-widest border px-2 py-1 transition-colors ${
+                  className={`rounded-sm px-2.5 py-1 text-[12px] font-medium ${
                     active
-                      ? "border-hive-amber bg-hive-amber/10 text-hive-amber"
-                      : "border-hive-border text-hive-muted hover:text-hive-text"
+                      ? "bg-surface-3 text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {chip.label}
@@ -318,9 +444,10 @@ export function KanbanBoard({ projectId, compact }: Props) {
               );
             })}
           </div>
-          <label className="flex items-center gap-2 text-xs text-hive-muted cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2 text-[12px] text-muted-foreground hover:text-foreground">
             <input
               type="checkbox"
+              className="size-3.5 accent-primary"
               checked={showTemplates}
               onChange={(e) => setShowTemplates(e.target.checked)}
             />
@@ -330,37 +457,73 @@ export function KanbanBoard({ projectId, compact }: Props) {
         <button
           type="button"
           onClick={() => setNewOpen(true)}
-          className="border border-hive-amber bg-hive-amber/10 px-3 py-1 text-xs uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20"
+          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-primary-hover hover:shadow-glow"
         >
-          + task
+          <PlusIcon />
+          New task
         </button>
       </div>
+
+      {hasDeepLinkFilters ? (
+        <div className="animate-enter flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[11px] text-faint">Filters:</span>
+          {statusFilter ? (
+            <FilterPill
+              label={`status: ${COLUMN_LABELS[statusFilter]}`}
+              clearLabel="Clear status filter"
+              onClear={clearStatusFilter}
+            />
+          ) : null}
+          {projectFilter ? (
+            <FilterPill
+              label={`project: ${projectsById[projectFilter]?.name ?? projectFilter}`}
+              clearLabel="Clear project filter"
+              onClear={clearProjectFilter}
+            />
+          ) : null}
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            className="text-[11px] text-faint underline-offset-2 hover:text-foreground hover:underline"
+          >
+            Clear all
+          </button>
+        </div>
+      ) : null}
 
       {!hydrated ? (
         <BoardSkeleton compact={compact} />
       ) : tasks.length === 0 ? (
         <EmptyState
+          illustration="board"
           title="Your board is empty"
-          description="Tasks let you queue work for an agent. Create one to start."
-          cta={{ label: "+ New task", onClick: () => setNewOpen(true) }}
+          description="Tasks queue work for an agent across your projects. Create your first one to get moving."
+          cta={{ label: "New task", onClick: () => setNewOpen(true) }}
         />
-      ) : null}
-
-      {hydrated && tasks.length > 0 ? (
+      ) : visibleTasks.length === 0 ? (
+        <EmptyState
+          illustration="board"
+          title="No tasks match these filters"
+          description="Clear the active filters to see the rest of the board."
+          cta={{ label: "Clear filters", onClick: clearAllFilters }}
+        />
+      ) : (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
           onDragEnd={onDragEnd}
         >
           <div
-            className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 ${
-              compact ? "max-h-[520px] overflow-y-auto" : ""
+            className={`flex snap-x gap-3 overflow-x-auto pb-2 ${
+              compact ? "" : "min-h-[480px]"
             }`}
           >
-            {TASK_STATUSES.map((status) => (
+            {visibleStatuses.map((status, i) => (
               <Column
                 key={status}
                 id={status}
+                index={i}
+                compact={compact}
                 label={COLUMN_LABELS[status]}
                 tasks={tasksByStatus[status]}
                 projectsById={projectsById}
@@ -397,7 +560,7 @@ export function KanbanBoard({ projectId, compact }: Props) {
             ))}
           </div>
         </DndContext>
-      ) : null}
+      )}
 
       <NewTaskModal
         open={newOpen}
@@ -427,21 +590,18 @@ export function KanbanBoard({ projectId, compact }: Props) {
 
 function BoardSkeleton({ compact }: { compact?: boolean }) {
   return (
-    <div
-      className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 ${
-        compact ? "max-h-[520px] overflow-hidden" : ""
-      }`}
-    >
+    <div className={`flex gap-3 overflow-x-hidden ${compact ? "" : "min-h-[480px]"}`}>
       {TASK_STATUSES.map((status) => (
         <div
           key={status}
-          className="flex flex-col gap-2 border border-hive-border bg-hive-panel/40 p-2"
+          className="flex min-w-60 max-w-md flex-1 flex-col gap-2 rounded-lg border border-border bg-surface-1 p-2 shadow-bevel"
         >
-          <div className="font-mono text-[10px] uppercase tracking-widest text-hive-muted px-1 py-1">
-            {COLUMN_LABELS[status]}
+          <div className="flex items-center justify-between px-1 py-1.5">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-5" />
           </div>
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-16" />
+            <Skeleton key={i} className="h-20 rounded-md" />
           ))}
         </div>
       ))}

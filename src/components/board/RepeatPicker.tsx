@@ -22,6 +22,11 @@ function formatLocal(d: Date): string {
   return `${y}-${m}-${day} ${h}:${min}`;
 }
 
+const chipBase = "rounded-full border px-2.5 py-1 font-mono text-[11px]";
+const chipActive = "border-primary/50 bg-primary-soft text-primary";
+const chipIdle =
+  "border-border text-muted-foreground hover:border-border-strong hover:text-foreground";
+
 export function RepeatPicker({ value, onChange }: Props) {
   const isPreset = useMemo(
     () => value !== null && CRON_PRESETS.some((p) => p.cron === value),
@@ -70,34 +75,32 @@ export function RepeatPicker({ value, onChange }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-2 border border-hive-border p-3">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+    <div className="flex flex-col gap-2.5 rounded-md border border-border bg-surface-1 p-3">
+      <span className="text-[12px] font-medium text-muted-foreground">
         Repeat
       </span>
 
-      <label className="flex items-center gap-2 text-xs text-hive-text cursor-pointer">
+      <label className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground">
         <input
           type="radio"
           name="repeat-mode"
+          className="size-3.5 accent-primary"
           checked={value === null}
           onChange={selectNever}
         />
         <span>Never (one-shot)</span>
       </label>
 
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-1.5">
         {CRON_PRESETS.map((p) => {
           const active = value === p.cron;
           return (
             <button
               key={p.cron}
               type="button"
+              aria-pressed={active}
               onClick={() => selectPreset(p.cron)}
-              className={`font-mono text-[10px] uppercase tracking-widest border px-2 py-1 transition-colors ${
-                active
-                  ? "border-hive-amber bg-hive-amber/10 text-hive-amber"
-                  : "border-hive-border text-hive-muted hover:text-hive-text"
-              }`}
+              className={`${chipBase} ${active ? chipActive : chipIdle}`}
             >
               {p.label}
             </button>
@@ -105,12 +108,9 @@ export function RepeatPicker({ value, onChange }: Props) {
         })}
         <button
           type="button"
+          aria-pressed={showCustom}
           onClick={openCustom}
-          className={`font-mono text-[10px] uppercase tracking-widest border px-2 py-1 transition-colors ${
-            showCustom
-              ? "border-hive-amber bg-hive-amber/10 text-hive-amber"
-              : "border-hive-border text-hive-muted hover:text-hive-text"
-          }`}
+          className={`${chipBase} ${showCustom ? chipActive : chipIdle}`}
         >
           Custom…
         </button>
@@ -122,26 +122,24 @@ export function RepeatPicker({ value, onChange }: Props) {
           value={customDraft}
           onChange={(e) => onCustomChange(e.target.value)}
           placeholder="m h dom mon dow"
-          className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text font-mono"
+          aria-label="Custom cron expression"
+          className="h-9 rounded-md border border-input bg-background px-3 font-mono text-[13px] text-foreground placeholder:text-faint"
         />
       ) : null}
 
       {value !== null && !valid ? (
-        <p className="text-xs text-red-400 font-mono">
+        <p role="alert" className="font-mono text-[12px] text-destructive">
           Invalid cron expression
         </p>
       ) : null}
 
       {value !== null && valid && preview.length > 0 ? (
         <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+          <span className="text-[11px] font-medium text-faint">
             Next 3 runs
           </span>
           {preview.map((d, i) => (
-            <span
-              key={i}
-              className="font-mono text-[11px] text-hive-text/80"
-            >
+            <span key={i} className="font-mono text-[12px] text-muted-foreground">
               {formatLocal(d)}
             </span>
           ))}

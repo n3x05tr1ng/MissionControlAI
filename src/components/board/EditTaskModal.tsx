@@ -12,6 +12,16 @@ import type {
 } from "@/lib/contracts";
 
 import { RepeatPicker } from "./RepeatPicker";
+import {
+  TaskModalShell,
+  btnDangerCls,
+  btnPrimaryCls,
+  btnSecondaryCls,
+  fieldLabelCls,
+  inputCls,
+  selectCls,
+  textareaCls,
+} from "./TaskModalShell";
 
 type Group = {
   label: string;
@@ -36,44 +46,46 @@ type Props = {
   projects: ProjectConfig[];
 };
 
-export function EditTaskModal({
+// El formulario se monta por tarea (key) y solo con el modal abierto: el
+// estado se inicializa desde la tarea sin efectos de sincronización.
+export function EditTaskModal({ task, open, ...rest }: Props) {
+  if (!open || !task) return null;
+  return <EditTaskForm key={task.id} task={task} {...rest} />;
+}
+
+function EditTaskForm({
   task,
-  open,
   onClose,
   onSaved,
   onDeleted,
   projects,
-}: Props) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [profileId, setProfileId] = useState<string>("default");
-  const [status, setStatus] = useState<TaskStatus>("backlog");
-  const [schedule, setSchedule] = useState<string | null>(null);
+}: Omit<Props, "open" | "task"> & { task: TaskRow }) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description ?? "");
+  const [prompt, setPrompt] = useState(task.prompt);
+  const [profileId, setProfileId] = useState<string>(
+    task.profile_id ?? "default",
+  );
+  const [status, setStatus] = useState<TaskStatus>(task.status);
+  const [schedule, setSchedule] = useState<string | null>(task.schedule ?? null);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open || !task) return;
-    setTitle(task.title);
-    setDescription(task.description ?? "");
-    setPrompt(task.prompt);
-    setProfileId(task.profile_id ?? "default");
-    setStatus(task.status);
-    setSchedule(task.schedule ?? null);
-    setError(null);
-  }, [open, task]);
-
-  useEffect(() => {
-    if (!open) return;
+    let cancelled = false;
     fetch("/api/profiles?includeTemplates=true")
       .then((r) => r.json())
-      .then((data: AgentProfile[]) => setProfiles(data))
-      .catch(() => setProfiles([]));
-  }, [open]);
-
-  if (!open || !task) return null;
+      .then((data: AgentProfile[]) => {
+        if (!cancelled) setProfiles(data);
+      })
+      .catch(() => {
+        if (!cancelled) setProfiles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const projectName =
     projects.find((p) => p.id === task.project_id)?.name ?? task.project_id;
@@ -82,7 +94,6 @@ export function EditTaskModal({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!task) return;
     setError(null);
     setBusy(true);
     try {
@@ -115,7 +126,6 @@ export function EditTaskModal({
   }
 
   async function destroy() {
-    if (!task) return;
     const ok = await confirm({
       title: "Delete task",
       message: `Delete task "${task.title}"?`,
@@ -144,151 +154,115 @@ export function EditTaskModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 hive-modal-overlay"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg border border-hive-border bg-hive-panel hive-modal-panel"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="border-b border-hive-border px-4 py-2 flex items-center justify-between">
-          <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-            [ EDIT TASK ]
-          </h2>
+    <TaskModalShell title="Edit task" onClose={onClose}>
+      <form onSubmit={save} className="flex flex-col gap-4 p-5">
+        <p className="font-mono text-[11px] text-faint">
+          Project: {projectName}
+        </p>
+
+        <label className="flex flex-col gap-1.5">
+          <span className={fieldLabelCls}>Title</span>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className={inputCls}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className={fieldLabelCls}>Description</span>
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className={inputCls}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className={fieldLabelCls}>Prompt</span>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={4}
+            className={textareaCls}
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1.5">
+            <span className={fieldLabelCls}>Profile</span>
+            <select
+              value={profileId}
+              onChange={(e) => setProfileId(e.target.value)}
+              className={selectCls}
+            >
+              {profiles.length === 0 ? (
+                <option value={profileId}>{profileId}</option>
+              ) : (
+                groups.map((g) => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.options.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              )}
+            </select>
+            {selected ? (
+              <span
+                className="font-mono text-[11px]"
+                style={{ color: selected.color }}
+              >
+                {selected.model} · {selected.permissionMode}
+              </span>
+            ) : null}
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={fieldLabelCls}>Status</span>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as TaskStatus)}
+              className={selectCls}
+            >
+              <option value="backlog">Backlog</option>
+              <option value="ready">Ready</option>
+              <option value="review">Review</option>
+              <option value="done">Done</option>
+            </select>
+          </label>
+        </div>
+
+        <RepeatPicker value={schedule} onChange={setSchedule} />
+
+        {error ? (
+          <p role="alert" className="font-mono text-[12px] text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="flex items-center justify-between pt-1">
           <button
             type="button"
-            onClick={onClose}
-            className="text-hive-muted hover:text-hive-amber text-sm"
+            onClick={destroy}
+            disabled={busy}
+            className={btnDangerCls}
           >
-            ✕
+            Delete
           </button>
-        </header>
-        <form onSubmit={save} className="p-4 flex flex-col gap-3">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            Project: {projectName}
-          </p>
-
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Title
-            </span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Description
-            </span>
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Prompt
-            </span>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={4}
-              className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text font-mono"
-            />
-          </label>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                Profile
-              </span>
-              <select
-                value={profileId}
-                onChange={(e) => setProfileId(e.target.value)}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-              >
-                {profiles.length === 0 ? (
-                  <option value={profileId}>{profileId}</option>
-                ) : (
-                  groups.map((g) => (
-                    <optgroup key={g.label} label={`— ${g.label} —`}>
-                      {g.options.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          ● {p.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))
-                )}
-              </select>
-              {selected ? (
-                <span
-                  className="font-mono text-[10px] mt-0.5"
-                  style={{ color: selected.color }}
-                >
-                  {selected.model} · {selected.permissionMode}
-                </span>
-              ) : null}
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                Status
-              </span>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-              >
-                <option value="backlog">backlog</option>
-                <option value="ready">ready</option>
-                <option value="review">review</option>
-                <option value="done">done</option>
-              </select>
-            </label>
-          </div>
-
-          <RepeatPicker value={schedule} onChange={setSchedule} />
-
-          {error ? (
-            <p className="text-xs text-red-400 font-mono">{error}</p>
-          ) : null}
-
-          <div className="flex justify-between items-center pt-2">
-            <button
-              type="button"
-              onClick={destroy}
-              disabled={busy}
-              className="border border-red-500/50 px-3 py-1 text-xs uppercase tracking-widest text-red-400 hover:bg-red-500/10 disabled:opacity-50"
-            >
-              delete
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className={btnSecondaryCls}>
+              Cancel
             </button>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="border border-hive-border px-3 py-1 text-xs uppercase tracking-widest text-hive-muted hover:text-hive-text"
-              >
-                cancel
-              </button>
-              <button
-                type="submit"
-                disabled={busy}
-                className="border border-hive-amber bg-hive-amber/10 px-3 py-1 text-xs uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20 disabled:opacity-50"
-              >
-                {busy ? "saving…" : "save"}
-              </button>
-            </div>
+            <button type="submit" disabled={busy} className={btnPrimaryCls}>
+              {busy ? "Saving…" : "Save changes"}
+            </button>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+      </form>
+    </TaskModalShell>
   );
 }

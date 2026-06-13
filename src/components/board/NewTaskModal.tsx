@@ -6,6 +6,15 @@ import { notify } from "@/lib/ui/notify";
 import type { AgentProfile, ProjectConfig, TaskStatus } from "@/lib/contracts";
 
 import { RepeatPicker } from "./RepeatPicker";
+import {
+  TaskModalShell,
+  btnPrimaryCls,
+  btnSecondaryCls,
+  fieldLabelCls,
+  inputCls,
+  selectCls,
+  textareaCls,
+} from "./TaskModalShell";
 
 type Props = {
   open: boolean;
@@ -29,13 +38,19 @@ function splitProfiles(profiles: AgentProfile[]): Group[] {
   return groups;
 }
 
-export function NewTaskModal({
-  open,
+// El formulario solo se monta con el modal abierto: el estado nace limpio en
+// cada apertura (sin efectos de reset → sin setState síncrono en efectos).
+export function NewTaskModal({ open, ...rest }: Props) {
+  if (!open) return null;
+  return <NewTaskForm {...rest} />;
+}
+
+function NewTaskForm({
   onClose,
   onCreated,
   projects,
   lockedProjectId,
-}: Props) {
+}: Omit<Props, "open">) {
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
   const [projectId, setProjectId] = useState<string>(
@@ -49,34 +64,27 @@ export function NewTaskModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    let cancelled = false;
     fetch("/api/profiles?includeTemplates=true")
       .then((r) => r.json())
       .then((data: AgentProfile[]) => {
+        if (cancelled) return;
         setProfiles(data);
-        if (data.length > 0 && !data.find((p) => p.id === profileId)) {
-          const def = data.find((p) => p.id === "default") ?? data[0];
-          setProfileId(def.id);
-        }
+        setProfileId((prev) => {
+          if (data.some((p) => p.id === prev)) return prev;
+          return (data.find((p) => p.id === "default") ?? data[0])?.id ?? prev;
+        });
       })
-      .catch(() => setProfiles([]));
-  }, [open, profileId]);
-
-  useEffect(() => {
-    if (!open) {
-      setTitle("");
-      setPrompt("");
-      setStatus("backlog");
-      setError(null);
-      setProjectId(lockedProjectId ?? projects[0]?.id ?? "");
-      setProfileId("default");
-      setSchedule(null);
-    }
-  }, [open, lockedProjectId, projects]);
-
-  if (!open) return null;
+      .catch(() => {
+        if (!cancelled) setProfiles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const groups = splitProfiles(profiles);
+  const selected = profiles.find((p) => p.id === profileId);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -119,142 +127,106 @@ export function NewTaskModal({
     }
   }
 
-  const selected = profiles.find((p) => p.id === profileId);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 hive-modal-overlay"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg border border-hive-border bg-hive-panel hive-modal-panel"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="border-b border-hive-border px-4 py-2 flex items-center justify-between">
-          <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-            [ NEW TASK ]
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-hive-muted hover:text-hive-amber text-sm"
-          >
-            ✕
+    <TaskModalShell title="New task" onClose={onClose}>
+      <form onSubmit={submit} className="flex flex-col gap-4 p-5">
+        {!lockedProjectId ? (
+          <label className="flex flex-col gap-1.5">
+            <span className={fieldLabelCls}>Project</span>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className={selectCls}
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        <label className="flex flex-col gap-1.5">
+          <span className={fieldLabelCls}>Title</span>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="What needs to get done?"
+            className={inputCls}
+            autoFocus
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className={fieldLabelCls}>Prompt</span>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={4}
+            placeholder="Instructions for the agent…"
+            className={textareaCls}
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1.5">
+            <span className={fieldLabelCls}>Profile</span>
+            <select
+              value={profileId}
+              onChange={(e) => setProfileId(e.target.value)}
+              className={selectCls}
+            >
+              {groups.map((g) => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.options.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {selected ? (
+              <span
+                className="font-mono text-[11px]"
+                style={{ color: selected.color }}
+              >
+                {selected.model} · {selected.permissionMode}
+              </span>
+            ) : null}
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={fieldLabelCls}>Status</span>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as TaskStatus)}
+              className={selectCls}
+            >
+              <option value="backlog">Backlog</option>
+              <option value="ready">Ready</option>
+            </select>
+          </label>
+        </div>
+
+        <RepeatPicker value={schedule} onChange={setSchedule} />
+
+        {error ? (
+          <p role="alert" className="font-mono text-[12px] text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className={btnSecondaryCls}>
+            Cancel
           </button>
-        </header>
-        <form onSubmit={submit} className="p-4 flex flex-col gap-3">
-          {!lockedProjectId ? (
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                Project
-              </span>
-              <select
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Title
-            </span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-              autoFocus
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Prompt
-            </span>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={4}
-              className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text font-mono"
-            />
-          </label>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                Profile
-              </span>
-              <select
-                value={profileId}
-                onChange={(e) => setProfileId(e.target.value)}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-              >
-                {groups.map((g) => (
-                  <optgroup key={g.label} label={`— ${g.label} —`}>
-                    {g.options.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        ● {p.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              {selected ? (
-                <span
-                  className="font-mono text-[10px] mt-0.5"
-                  style={{ color: selected.color }}
-                >
-                  {selected.model} · {selected.permissionMode}
-                </span>
-              ) : null}
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                Status
-              </span>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-              >
-                <option value="backlog">backlog</option>
-                <option value="ready">ready</option>
-              </select>
-            </label>
-          </div>
-
-          <RepeatPicker value={schedule} onChange={setSchedule} />
-
-          {error ? (
-            <p className="text-xs text-red-400 font-mono">{error}</p>
-          ) : null}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="border border-hive-border px-3 py-1 text-xs uppercase tracking-widest text-hive-muted hover:text-hive-text"
-            >
-              cancel
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="border border-hive-amber bg-hive-amber/10 px-3 py-1 text-xs uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20 disabled:opacity-50"
-            >
-              {busy ? "creating…" : "create"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          <button type="submit" disabled={busy} className={btnPrimaryCls}>
+            {busy ? "Creating…" : "Create task"}
+          </button>
+        </div>
+      </form>
+    </TaskModalShell>
   );
 }

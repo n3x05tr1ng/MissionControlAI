@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -27,6 +28,16 @@ function RecurringIcon() {
   );
 }
 
+function DotsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="5" cy="12" r="1.7" />
+      <circle cx="12" cy="12" r="1.7" />
+      <circle cx="19" cy="12" r="1.7" />
+    </svg>
+  );
+}
+
 function recurrenceLabel(task: TaskRow): string {
   const cron = task.schedule;
   if (!cron) return "scheduled";
@@ -34,52 +45,64 @@ function recurrenceLabel(task: TaskRow): string {
   return preset ? preset.label : describeCron(cron);
 }
 
-type Props = {
-  task: TaskRow;
-  projectName?: string;
-  onEdit?: (task: TaskRow) => void;
-  onDelete?: (task: TaskRow) => void;
-};
-
-function StatusBadge({ task }: { task: TaskRow }) {
+/* Estado de la tarjeta con tokens semánticos (patrón badge: *-soft + color vivo). */
+function TaskStateBadge({ task }: { task: TaskRow }) {
+  const base =
+    "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 font-mono text-[10px]";
   if (task.status === "running") {
     return (
-      <span className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-        ● live
+      <span className={`${base} bg-primary-soft text-primary`} title="Agent running">
+        <span aria-hidden="true" className="size-1 animate-pulse rounded-full bg-current" />
+        live
       </span>
     );
   }
   if (task.status === "review") {
     return (
-      <span
-        className="font-mono text-[10px] uppercase tracking-widest text-emerald-400"
-        title="awaiting review"
-      >
-        ✓ ok
+      <span className={`${base} bg-warning-soft text-warning`} title="Awaiting your review">
+        <span aria-hidden="true" className="size-1 rounded-full bg-current" />
+        review
       </span>
     );
   }
   if (task.status === "done") {
     return (
-      <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-        ✓ done
+      <span className={`${base} bg-success-soft text-success`} title="Completed">
+        <span aria-hidden="true" className="size-1 rounded-full bg-current" />
+        done
       </span>
     );
   }
   if (task.status === "backlog" && task.last_error) {
     return (
-      <span
-        className="font-mono text-[10px] uppercase tracking-widest text-red-400"
-        title={task.last_error}
-      >
-        ● err
+      <span className={`${base} bg-destructive-soft text-destructive`} title={task.last_error}>
+        <span aria-hidden="true" className="size-1 rounded-full bg-current" />
+        error
       </span>
     );
   }
   return null;
 }
 
-export function TaskCard({ task, projectName, onEdit, onDelete }: Props) {
+type Props = {
+  task: TaskRow;
+  projectName?: string;
+  /** Posición dentro de la columna — escalona la entrada (cap 8). */
+  index?: number;
+  onEdit?: (task: TaskRow) => void;
+  onDelete?: (task: TaskRow) => void;
+};
+
+// Caída suave al soltar (ease-out corto, design language §5).
+const DROP_TRANSITION = {
+  duration: 200,
+  easing: "cubic-bezier(0.25, 1, 0.5, 1)",
+};
+
+const metaChipCls =
+  "rounded-xs border border-border px-1.5 py-0.5 font-mono text-[10px] text-faint";
+
+export function TaskCard({ task, projectName, index = 0, onEdit, onDelete }: Props) {
   const {
     attributes,
     listeners,
@@ -87,94 +110,189 @@ export function TaskCard({ task, projectName, onEdit, onDelete }: Props) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id, data: { task } });
+  } = useSortable({ id: task.id, data: { task }, transition: DROP_TRANSITION });
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Delay de entrada congelado en el mount (no se reinicia al reordenar).
+  const [enterDelay] = useState(() => Math.min(index, 7) * 30);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // Cierra el menú con click fuera o Escape (devolviendo el foco al trigger).
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target)) return;
+      if (triggerRef.current?.contains(target)) return;
+      setMenuOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
+  // Al abrir, mueve el foco al primer item del menú.
+  useEffect(() => {
+    if (!menuOpen) return;
+    menuRef.current
+      ?.querySelector<HTMLButtonElement>('[role="menuitem"]')
+      ?.focus();
+  }, [menuOpen]);
+
+  function onMenuKeyDown(e: React.KeyboardEvent) {
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+    );
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      items[(current + 1) % items.length]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      items[(current - 1 + items.length) % items.length]?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === "Tab") {
+      setMenuOpen(false);
+    }
+  }
+
+  // El nodo externo lleva el transform de dnd-kit; el interno la animación de
+  // entrada (no pueden convivir en el mismo elemento: la animation pisa el
+  // transform inline mientras corre).
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
   };
 
+  const hasMenu = Boolean(onEdit || onDelete);
+  const isRecurring = task.recurring_template === 1 || task.schedule !== null;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="group relative border border-hive-border bg-hive-bg/60 p-3 hover:border-hive-amber/60 hover:bg-hive-bg/80 transition-colors duration-150 ease-out cursor-grab active:cursor-grabbing"
+      className="touch-none cursor-grab active:cursor-grabbing"
       {...attributes}
       {...listeners}
     >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-semibold text-hive-text leading-snug break-words min-w-0">
-          {task.title}
-        </h3>
-        <StatusBadge task={task} />
-      </div>
+      <div
+        className="group animate-enter relative rounded-md border border-border bg-surface-2 p-3 shadow-bevel hover:border-border-strong hover:bg-surface-3"
+        style={{ animationDelay: `${enterDelay}ms` }}
+      >
+        <div className={`flex items-start justify-between gap-2 ${hasMenu ? "pr-5" : ""}`}>
+          <h4 className="min-w-0 break-words text-[13px] font-medium leading-snug text-foreground">
+            {task.title}
+          </h4>
+          <TaskStateBadge task={task} />
+        </div>
 
-      {task.description ? (
-        <p className="mt-1 text-xs text-hive-muted line-clamp-1">
-          {task.description}
-        </p>
-      ) : null}
+        {task.description ? (
+          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground line-clamp-2">
+            {task.description}
+          </p>
+        ) : null}
 
-      <div className="mt-2 flex flex-wrap items-center gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-widest border border-hive-border px-1.5 py-0.5 text-hive-muted">
-          {task.agent_id}
-        </span>
-        {projectName ? (
-          <span className="font-mono text-[10px] uppercase tracking-widest border border-hive-border px-1.5 py-0.5 text-hive-muted">
-            {projectName}
-          </span>
-        ) : null}
-        {task.recurring_template === 1 || task.schedule !== null ? (
-          <span
-            className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest border border-hive-amber/50 px-1.5 py-0.5 text-hive-amber"
-            title={task.schedule ?? "scheduled"}
-          >
-            <RecurringIcon />
-            {recurrenceLabel(task)}
-          </span>
-        ) : null}
-        {task.parent_template_id ? (
-          <span
-            className="font-mono text-[10px] uppercase tracking-widest border border-hive-border px-1.5 py-0.5 text-hive-muted"
-            title={`Spawned from template ${task.parent_template_id}`}
-          >
-            from template
-          </span>
-        ) : null}
-      </div>
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          <span className={metaChipCls}>{task.agent_id}</span>
+          {projectName ? <span className={metaChipCls}>{projectName}</span> : null}
+          {isRecurring ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-xs border border-primary/40 bg-primary-soft px-1.5 py-0.5 font-mono text-[10px] text-primary"
+              title={task.schedule ?? "scheduled"}
+            >
+              <RecurringIcon />
+              {recurrenceLabel(task)}
+            </span>
+          ) : null}
+          {task.parent_template_id ? (
+            <span
+              className={metaChipCls}
+              title={`Spawned from template ${task.parent_template_id}`}
+            >
+              from template
+            </span>
+          ) : null}
+        </div>
 
-      {(onEdit || onDelete) && (
-        <details
-          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <summary className="list-none cursor-pointer text-hive-muted hover:text-hive-amber px-1 select-none text-xs">
-            ⋯
-          </summary>
-          <div className="absolute right-0 mt-1 z-10 border border-hive-border bg-hive-panel py-1 min-w-[100px] shadow-lg">
-            {onEdit ? (
-              <button
-                type="button"
-                onClick={() => onEdit(task)}
-                className="block w-full text-left px-3 py-1 text-xs text-hive-text hover:bg-hive-bg/60"
+        {hasMenu ? (
+          <>
+            <button
+              ref={triggerRef}
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label={`Actions for "${task.title}"`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className={`absolute right-1.5 top-1.5 rounded-sm p-1 text-faint transition-opacity hover:bg-surface-3 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 ${
+                menuOpen ? "text-foreground opacity-100" : "opacity-0"
+              }`}
+            >
+              <DotsIcon />
+            </button>
+
+            {menuOpen ? (
+              <div
+                ref={menuRef}
+                role="menu"
+                aria-label={`Actions for "${task.title}"`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onKeyDown={onMenuKeyDown}
+                className="animate-overlay absolute right-1.5 top-8 z-20 min-w-[132px] rounded-md border border-border bg-popover py-1 shadow-overlay"
               >
-                Edit
-              </button>
+                {onEdit ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpen(false);
+                      onEdit(task);
+                    }}
+                    className="flex w-full items-center px-3 py-1.5 text-left text-[12px] text-foreground hover:bg-surface-2"
+                  >
+                    Edit task
+                  </button>
+                ) : null}
+                {onDelete ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpen(false);
+                      onDelete(task);
+                    }}
+                    className="flex w-full items-center px-3 py-1.5 text-left text-[12px] text-destructive hover:bg-destructive-soft"
+                  >
+                    Delete task
+                  </button>
+                ) : null}
+              </div>
             ) : null}
-            {onDelete ? (
-              <button
-                type="button"
-                onClick={() => onDelete(task)}
-                className="block w-full text-left px-3 py-1 text-xs text-red-400 hover:bg-hive-bg/60"
-              >
-                Delete
-              </button>
-            ) : null}
-          </div>
-        </details>
-      )}
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }
