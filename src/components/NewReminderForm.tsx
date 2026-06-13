@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { notify } from "@/lib/ui/notify";
@@ -12,6 +12,15 @@ type Status =
   | { kind: "loading" }
   | { kind: "error"; message: string };
 
+type Props = {
+  /**
+   * Cuando es true (p. ej. al llegar con /reminders?new=1 desde el
+   * CommandPalette o un EmptyState), hace scroll al formulario y enfoca
+   * el campo de mensaje.
+   */
+  focusOnMount?: boolean;
+};
+
 function defaultDueAtLocal(): string {
   const d = new Date(Date.now() + 60 * 60 * 1000);
   const yyyy = d.getFullYear();
@@ -22,8 +31,13 @@ function defaultDueAtLocal(): string {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
-export function NewReminderForm() {
+const inputClass =
+  "rounded-md border border-input bg-background px-3 text-[13px] text-foreground transition-colors placeholder:text-faint hover:border-border-strong";
+
+export function NewReminderForm({ focusOnMount = false }: Props) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const messageRef = useRef<HTMLTextAreaElement | null>(null);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [projectId, setProjectId] = useState<string>("");
   const [message, setMessage] = useState<string>("");
@@ -42,7 +56,7 @@ export function NewReminderForm() {
         if (cancelled) return;
         setProjects(body.map((s) => ({ id: s.config.id, name: s.config.name })));
       } catch {
-        // ignore — dropdown remains "(any project)"
+        // ignore — dropdown remains "Any project"
       }
     }
     void load();
@@ -50,6 +64,21 @@ export function NewReminderForm() {
       cancelled = true;
     };
   }, []);
+
+  // ?new=1 → el form recibe focus REAL: scroll + caret en el mensaje.
+  useEffect(() => {
+    if (!focusOnMount) return;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    messageRef.current?.focus({ preventScroll: true });
+    formRef.current?.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "start",
+    });
+    // Limpia ?new=1 para que el siguiente CTA vuelva a disparar el focus.
+    router.replace("/reminders", { scroll: false });
+  }, [focusOnMount, router]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -95,67 +124,73 @@ export function NewReminderForm() {
 
   return (
     <form
+      ref={formRef}
+      id="new-reminder"
       onSubmit={onSubmit}
-      className="border border-hive-border bg-hive-panel p-4 flex flex-col gap-3"
+      className="hive-card animate-enter flex scroll-mt-20 flex-col gap-4 p-5"
     >
-      <h3 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-        [ NEW REMINDER ]
-      </h3>
+      <h2 className="text-[12px] font-medium text-muted-foreground">
+        New reminder
+      </h2>
 
-      <label className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-          Project
-        </span>
-        <select
-          value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
-          className="bg-hive-bg border border-hive-border px-2 py-1 font-mono text-sm text-hive-text focus:outline-none focus:border-hive-amber"
-        >
-          <option value="">(any project)</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+      <label className="flex flex-col gap-1.5">
+        <span className="text-[12px] font-medium text-muted-foreground">
           Message
         </span>
         <textarea
+          ref={messageRef}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           rows={2}
           required
-          className="bg-hive-bg border border-hive-border px-2 py-1 font-mono text-sm text-hive-text focus:outline-none focus:border-hive-amber"
+          placeholder="What should we nudge you about?"
+          className={`${inputClass} resize-y py-2 leading-relaxed`}
         />
       </label>
 
-      <label className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-          Due
-        </span>
-        <input
-          type="datetime-local"
-          value={dueAtLocal}
-          onChange={(e) => setDueAtLocal(e.target.value)}
-          required
-          className="bg-hive-bg border border-hive-border px-2 py-1 font-mono text-sm text-hive-text focus:outline-none focus:border-hive-amber"
-        />
-      </label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[12px] font-medium text-muted-foreground">
+            Due
+          </span>
+          <input
+            type="datetime-local"
+            value={dueAtLocal}
+            onChange={(e) => setDueAtLocal(e.target.value)}
+            required
+            className={`${inputClass} h-9 font-mono [color-scheme:dark]`}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[12px] font-medium text-muted-foreground">
+            Project
+          </span>
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className={`${inputClass} h-9`}
+          >
+            <option value="">Any project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <div className="flex items-center gap-3">
         <button
           type="submit"
           disabled={status.kind === "loading"}
-          className="border border-hive-amber bg-transparent px-3 py-1 font-mono text-xs uppercase tracking-widest text-hive-amber hover:bg-hive-amber/10 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-primary-hover hover:shadow-glow disabled:cursor-not-allowed disabled:opacity-50"
         >
           {status.kind === "loading" ? "Saving…" : "Add reminder"}
         </button>
         {status.kind === "error" ? (
-          <span className="font-mono text-[11px] text-red-400">
+          <span role="alert" className="font-mono text-[11px] text-destructive">
             {status.message}
           </span>
         ) : null}

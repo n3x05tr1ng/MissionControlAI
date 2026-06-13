@@ -46,12 +46,14 @@ export function ReminderRowActions({ reminderId }: Props) {
         type="button"
         onClick={dismiss}
         disabled={busy}
-        className="border border-hive-border bg-transparent px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber hover:border-hive-amber disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex h-7 items-center rounded-md border border-border bg-transparent px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:border-border-strong hover:bg-surface-2 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {busy ? "…" : "dismiss"}
+        {busy ? "Dismissing…" : "Dismiss"}
       </button>
       {error ? (
-        <span className="font-mono text-[10px] text-red-400">{error}</span>
+        <span role="alert" className="font-mono text-[11px] text-destructive">
+          {error}
+        </span>
       ) : null}
     </span>
   );
