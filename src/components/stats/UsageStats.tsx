@@ -30,26 +30,29 @@ export function UsageStats({ stats }: Props) {
   ];
 
   return (
-    <section className="border border-hive-border bg-hive-panel">
-      <header className="flex items-center justify-between border-b border-hive-border px-4 py-2">
-        <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-          [ USAGE ]
+    <section className="hive-card animate-enter overflow-hidden">
+      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+        <h2 className="text-[12px] font-medium text-muted-foreground">
+          Usage
         </h2>
         {stats.lastRunAt ? (
-          <span className="font-mono text-[10px] text-hive-muted">
+          <span className="font-mono text-[11px] text-faint">
             last run · {stats.lastRunAt.slice(0, 10)}
           </span>
         ) : null}
       </header>
-      <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
+      <div className="stagger-children grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
         {cards.map((c) => (
-          <div key={c.label} className="border border-hive-border p-3">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+          <div
+            key={c.label}
+            className="rounded-md border border-border bg-surface-2 p-3"
+          >
+            <div className="text-[11px] font-medium text-faint">
               {c.label}
             </div>
             <div
-              className={`mt-2 text-xl font-semibold ${
-                c.accent ? "text-hive-amber" : "text-hive-text"
+              className={`mt-2 text-xl font-semibold tabular-nums ${
+                c.accent ? "text-primary" : "text-foreground"
               }`}
             >
               {c.value}
@@ -57,8 +60,8 @@ export function UsageStats({ stats }: Props) {
           </div>
         ))}
       </div>
-      <div className="border-t border-hive-border p-3">
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+      <div className="border-t border-border p-3">
+        <div className="mb-2 text-[11px] font-medium text-faint">
           Runs · last 14d
         </div>
         <Sparkline data={stats.runsLast14} />

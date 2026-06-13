@@ -19,30 +19,30 @@ function openCommandPalette(): void {
 }
 
 const cardClass =
-  "flex flex-col gap-2 border border-hive-border bg-hive-bg p-4 text-left transition-colors hover:border-hive-amber/60";
-const cardTitle = "font-sans text-sm text-hive-text";
-const cardHint =
-  "font-mono text-[10px] uppercase tracking-widest text-hive-muted";
+  "group flex flex-col gap-1.5 rounded-lg border border-border bg-surface-2/70 p-4 text-left hover:-translate-y-0.5 hover:border-border-strong hover:bg-surface-2";
+const stepClass = "font-mono text-[11px] text-primary";
+const titleClass = "text-sm font-medium text-foreground";
+const hintClass = "text-[12px] leading-relaxed text-muted-foreground";
 
 export function HeroFirstRunActions() {
   return (
-    <div className="mt-6">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <div className="relative mt-6">
+      <div className="stagger-children grid grid-cols-1 gap-3 md:grid-cols-3">
         <button
           type="button"
           onClick={() => openModal("newProject")}
           className={cardClass}
         >
-          <span className={cardHint}>step 1</span>
-          <span className={cardTitle}>Add your first project</span>
-          <span className="text-xs text-hive-muted">
+          <span className={stepClass}>step 1</span>
+          <span className={titleClass}>Add your first project</span>
+          <span className={hintClass}>
             Point Hive at any folder on your machine.
           </span>
         </button>
         <Link href="/profiles" className={cardClass}>
-          <span className={cardHint}>step 2</span>
-          <span className={cardTitle}>Browse Agent Profiles</span>
-          <span className="text-xs text-hive-muted">
+          <span className={stepClass}>step 2</span>
+          <span className={titleClass}>Browse agent profiles</span>
+          <span className={hintClass}>
             Pick the personalities the agents will use.
           </span>
         </Link>
@@ -51,9 +51,11 @@ export function HeroFirstRunActions() {
           onClick={openCommandPalette}
           className={cardClass}
         >
-          <span className={cardHint}>tip · cmd+k</span>
-          <span className={cardTitle}>Open the command palette</span>
-          <span className="text-xs text-hive-muted">
+          <span className={`${stepClass} flex items-center gap-1.5`}>
+            tip <span className="keycap">⌘K</span>
+          </span>
+          <span className={titleClass}>Open the command palette</span>
+          <span className={hintClass}>
             Jump anywhere in Hive with one shortcut.
           </span>
         </button>
@@ -61,9 +63,9 @@ export function HeroFirstRunActions() {
       <div className="mt-4 text-center">
         <Link
           href="/welcome"
-          className="font-mono text-[11px] uppercase tracking-widest text-hive-muted hover:text-hive-amber"
+          className="text-[12px] text-muted-foreground hover:text-primary"
         >
-          first time? open the guided wizard →
+          First time here? Open the guided wizard →
         </Link>
       </div>
     </div>

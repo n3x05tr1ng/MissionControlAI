@@ -11,33 +11,37 @@ import {
   YAxis,
 } from "recharts";
 
+import {
+  chartTooltipContentStyle,
+  chartTooltipLabelStyle,
+  useChartTokens,
+} from "@/components/stats/useChartTokens";
 import { formatTokens } from "@/lib/format";
 
 type Point = { date: string; runs: number; tokens: number };
 
 type Props = {
   data: Point[];
+  /** Skip the card frame when a parent panel already provides one. */
+  frameless?: boolean;
 };
-
-const AMBER = "#FFB000";
-const CYAN = "#5cc8ff";
-const PANEL = "#13161a";
-const BORDER = "#23282e";
-const TEXT = "#e6e6e6";
-const MUTED = "#7a8088";
 
 function shortDate(iso: string): string {
   // YYYY-MM-DD → MM-DD
   return iso.length === 10 ? iso.slice(5) : iso;
 }
 
-export function RunsChart({ data }: Props) {
+export function RunsChart({ data, frameless = false }: Props) {
+  const tokens = useChartTokens();
   const totalRuns = data.reduce((acc, d) => acc + d.runs, 0);
+  const frame = frameless ? "" : "hive-card ";
 
   if (totalRuns === 0) {
     return (
-      <div className="flex h-[220px] items-center justify-center border border-hive-border bg-hive-panel p-4">
-        <p className="text-sm text-hive-muted">
+      <div
+        className={`${frame}flex h-[220px] items-center justify-center p-4`}
+      >
+        <p className="max-w-[28ch] text-center text-[13px] text-muted-foreground">
           No runs yet — kick off a task to see activity here.
         </p>
       </div>
@@ -45,7 +49,7 @@ export function RunsChart({ data }: Props) {
   }
 
   return (
-    <div className="h-[220px] border border-hive-border bg-hive-panel p-2">
+    <div className={`${frame}h-[220px] p-2`}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={data}
@@ -53,42 +57,40 @@ export function RunsChart({ data }: Props) {
         >
           <defs>
             <linearGradient id="runsFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={AMBER} stopOpacity={0.45} />
-              <stop offset="100%" stopColor={AMBER} stopOpacity={0} />
+              <stop offset="0%" stopColor={tokens.primary} stopOpacity={0.4} />
+              <stop offset="100%" stopColor={tokens.primary} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke={BORDER} strokeDasharray="3 3" />
+          <CartesianGrid stroke={tokens.border} strokeDasharray="3 3" />
           <XAxis
             dataKey="date"
             tickFormatter={shortDate}
-            stroke={MUTED}
+            stroke={tokens.faint}
             fontSize={10}
             tickLine={false}
+            axisLine={false}
           />
           <YAxis
             yAxisId="runs"
-            stroke={MUTED}
+            stroke={tokens.faint}
             fontSize={10}
             tickLine={false}
+            axisLine={false}
             allowDecimals={false}
           />
           <YAxis
             yAxisId="tokens"
             orientation="right"
-            stroke={MUTED}
+            stroke={tokens.faint}
             fontSize={10}
             tickLine={false}
+            axisLine={false}
             tickFormatter={(v: number) => formatTokens(v)}
           />
           <Tooltip
-            contentStyle={{
-              background: PANEL,
-              border: `1px solid ${BORDER}`,
-              borderRadius: 0,
-              color: TEXT,
-              fontSize: 12,
-            }}
-            labelStyle={{ color: MUTED, fontFamily: "monospace" }}
+            contentStyle={chartTooltipContentStyle}
+            labelStyle={chartTooltipLabelStyle}
+            cursor={{ stroke: tokens.border }}
             formatter={(value, name) => {
               const n = typeof value === "number" ? value : Number(value ?? 0);
               return name === "tokens"
@@ -100,7 +102,7 @@ export function RunsChart({ data }: Props) {
             yAxisId="runs"
             type="monotone"
             dataKey="runs"
-            stroke={AMBER}
+            stroke={tokens.primary}
             strokeWidth={2}
             fill="url(#runsFill)"
           />
@@ -108,7 +110,7 @@ export function RunsChart({ data }: Props) {
             yAxisId="tokens"
             type="monotone"
             dataKey="tokens"
-            stroke={CYAN}
+            stroke={tokens.info}
             strokeWidth={2}
             dot={false}
           />

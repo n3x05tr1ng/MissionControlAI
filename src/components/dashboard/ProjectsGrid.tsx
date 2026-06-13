@@ -12,12 +12,13 @@ type Props = {
 export function ProjectsGrid({ snapshots, tasksByProject }: Props) {
   return (
     <section>
-      <header className="mb-2 px-1">
-        <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-          [ PROJECTS · {snapshots.length} ]
-        </h2>
+      <header className="mb-2 flex items-center gap-2 px-1">
+        <h2 className="text-sm font-medium text-foreground">Projects</h2>
+        <span className="rounded-full bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+          {snapshots.length}
+        </span>
       </header>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="stagger-children grid grid-cols-1 gap-4 md:grid-cols-2">
         {snapshots.map((s) => (
           <ProjectCard
             key={s.config.id}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { confirm } from "@/components/ui/ConfirmDialog";
+import { msSince } from "@/lib/time";
 import { notify } from "@/lib/ui/notify";
 
 interface ActiveRun {
@@ -13,7 +14,13 @@ interface ActiveRun {
   ageMs: number;
 }
 
-const POLL_MS = 2500;
+// Live updates ride the existing /api/projects/stream SSE — every project
+// status change (run started/finished) publishes a project_index event, so a
+// debounced refetch keeps this list fresh without fast polling. The slow
+// interval below is only a safety net for missed events / dropped streams.
+const SSE_REFETCH_DEBOUNCE_MS = 400;
+const FALLBACK_POLL_MS = 30_000;
+const NO_SSE_POLL_MS = 5_000;
 
 function formatAge(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -25,7 +32,8 @@ function formatAge(ms: number): string {
 export function ActiveNow() {
   const [runs, setRuns] = useState<ActiveRun[]>([]);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
-  // Re-render every second so the live mm:ss counter ticks without re-fetch.
+  const [live, setLive] = useState(false);
+  // Re-render every second so the mm:ss counter ticks (only while runs exist).
   const [, setTick] = useState(0);
   const mountedRef = useRef(true);
 
@@ -44,18 +52,59 @@ export function ActiveNow() {
         const data = (await res.json()) as ActiveRun[];
         if (mountedRef.current) setRuns(data);
       } catch {
-        // network blips are noisy; the next poll will catch up.
+        // network blips are noisy; the next event/poll will catch up.
       }
     }
     void fetchRuns();
-    const id = setInterval(fetchRuns, POLL_MS);
-    return () => clearInterval(id);
+
+    const hasSse =
+      typeof window !== "undefined" &&
+      typeof window.EventSource !== "undefined";
+
+    // Safety-net poll: slow when SSE drives updates, faster without it.
+    const pollId = setInterval(
+      () => void fetchRuns(),
+      hasSse ? FALLBACK_POLL_MS : NO_SSE_POLL_MS,
+    );
+
+    let es: EventSource | null = null;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    if (hasSse) {
+      es = new EventSource("/api/projects/stream");
+      es.onopen = () => {
+        if (mountedRef.current) setLive(true);
+      };
+      es.onerror = () => {
+        // The browser auto-reconnects; surface the degraded state meanwhile.
+        if (mountedRef.current) setLive(false);
+      };
+      es.onmessage = (ev) => {
+        try {
+          const frame = JSON.parse(ev.data) as { type?: string };
+          if (!frame || typeof frame.type !== "string") return;
+          // Snapshot fires on connect — the mount fetch already covered it.
+          if (frame.type === "snapshot") return;
+          if (debounce) clearTimeout(debounce);
+          debounce = setTimeout(() => void fetchRuns(), SSE_REFETCH_DEBOUNCE_MS);
+        } catch {
+          // ignore malformed frames
+        }
+      };
+    }
+
+    return () => {
+      clearInterval(pollId);
+      if (debounce) clearTimeout(debounce);
+      if (es) es.close();
+    };
   }, []);
 
+  const hasRuns = runs.length > 0;
   useEffect(() => {
+    if (!hasRuns) return;
     const id = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [hasRuns]);
 
   async function stop(run: ActiveRun): Promise<void> {
     const ok = await confirm({
@@ -89,48 +138,74 @@ export function ActiveNow() {
     }
   }
 
-  if (runs.length === 0) {
+  const liveBadge = (
+    <span
+      className="flex items-center gap-1.5 font-mono text-[11px] text-faint"
+      title={live ? "Live via server events" : "Updating via slow polling"}
+    >
+      <span
+        className={`inline-block h-1.5 w-1.5 rounded-full ${
+          live ? "animate-pulse bg-success" : "bg-faint"
+        }`}
+        aria-hidden="true"
+      />
+      {live ? "live" : "polling"}
+    </span>
+  );
+
+  if (!hasRuns) {
     return (
-      <section className="border border-hive-border bg-hive-panel px-4 py-2">
-        <p className="font-mono text-[11px] text-hive-muted">
-          [ ACTIVE NOW ] No active runs right now.
+      <section className="hive-card animate-enter flex items-center justify-between gap-3 px-4 py-2.5">
+        <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full bg-faint"
+            aria-hidden="true"
+          />
+          No active runs right now.
         </p>
+        {liveBadge}
       </section>
     );
   }
 
-  const now = Date.now();
   return (
-    <section className="border border-hive-border bg-hive-panel">
-      <header className="border-b border-hive-border px-4 py-2">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-          [ ACTIVE NOW · {runs.length} ]
+    <section className="hive-card animate-enter overflow-hidden">
+      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+        <h3 className="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
+          Active now
+          <span className="rounded-full bg-primary-soft px-2 py-0.5 font-mono text-[11px] text-primary">
+            {runs.length}
+          </span>
         </h3>
+        {liveBadge}
       </header>
-      <div className="flex gap-3 overflow-x-auto p-3">
+      <div className="stagger-children flex gap-3 overflow-x-auto p-3">
         {runs.map((r) => {
-          const age = now - r.startedAt;
+          const age = msSince(r.startedAt);
           return (
             <div
               key={r.sessionId}
-              className="flex min-w-[200px] shrink-0 flex-col gap-2 border border-hive-border bg-hive-bg p-3"
+              className="flex min-w-[220px] shrink-0 flex-col gap-2 rounded-lg border border-border bg-surface-2 p-3"
             >
               <div className="flex items-center gap-2">
-                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-hive-amber" />
-                <span className="truncate text-sm text-hive-text">
+                <span
+                  className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary"
+                  aria-hidden="true"
+                />
+                <span className="truncate text-[13px] font-medium text-foreground">
                   {r.projectName}
                 </span>
               </div>
-              <div className="font-mono text-[11px] text-hive-cyan">
+              <div className="font-mono text-[12px] tabular-nums text-primary">
                 {formatAge(age)}
               </div>
               <button
                 type="button"
                 onClick={() => void stop(r)}
                 disabled={stoppingId === r.sessionId}
-                className="border border-hive-red/50 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-hive-red hover:bg-hive-red/10 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-7 self-start rounded-md border border-destructive/40 bg-destructive-soft px-2.5 text-[12px] font-medium text-destructive hover:bg-destructive/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {stoppingId === r.sessionId ? "stopping…" : "stop"}
+                {stoppingId === r.sessionId ? "Stopping…" : "Stop"}
               </button>
             </div>
           );

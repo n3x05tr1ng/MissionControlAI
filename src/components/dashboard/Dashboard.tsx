@@ -7,6 +7,7 @@ import { ActiveNow } from "@/components/dashboard/ActiveNow";
 import { DashboardFooter } from "@/components/dashboard/Footer";
 import { Hero } from "@/components/dashboard/Hero";
 import { NeedsAttention } from "@/components/dashboard/NeedsAttention";
+import { NewProjectCta } from "@/components/dashboard/NewProjectCta";
 import { ProjectsGrid } from "@/components/dashboard/ProjectsGrid";
 import {
   RecentSessions,
@@ -16,10 +17,10 @@ import {
   UpcomingRecurring,
   type UpcomingRecurringItem,
 } from "@/components/dashboard/UpcomingRecurring";
-import { NewProjectButton } from "@/components/NewProjectButton";
-import { NewProjectEmptyState } from "@/components/NewProjectEmptyState";
+import { EmptyState } from "@/components/EmptyState";
 import { RecentActivityPanel } from "@/components/RecentActivityPanel";
 import { RemindersPanel } from "@/components/RemindersPanel";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { KpiCards } from "@/components/stats/KpiCards";
 import { RunsChart } from "@/components/stats/RunsChart";
 import { getDb } from "@/lib/db";
@@ -35,6 +36,7 @@ import {
   tasksCountByProject,
 } from "@/lib/repos/tasks";
 import { getSchedulerStartedAt } from "@/lib/scheduler";
+import { getUserName } from "@/lib/settings";
 import {
   allTimeTotals,
   kpis as statsKpis,
@@ -46,6 +48,13 @@ import { compareByStatus } from "@/lib/statusOrder";
 
 const RECENT_SESSIONS_LIMIT = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+function greeting(hour: number): string {
+  if (hour < 5) return "Good night";
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
 
 // Pull a small batch directly so the dashboard can show cross-project sessions
 // without going through per-project repos.
@@ -202,17 +211,33 @@ export async function Dashboard() {
 
   const firstRun = !isOnboardingDone();
   const empty = snapshots.length === 0;
+  const welcome = firstRun && empty;
+
+  const attentionTotal =
+    blockedSnapshots.length +
+    needsInputSnapshots.length +
+    overdueReminders.length +
+    tasksInReview.length +
+    failedRuns.length;
 
   return (
-    <section className="max-w-7xl">
+    <section className="mx-auto max-w-7xl">
       <DashboardLiveBridge />
 
-      <header className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="font-mono text-xs tracking-widest text-hive-amber">
-          [ DASHBOARD ]
-        </h1>
-        <NewProjectButton />
-      </header>
+      <PageHeader
+        overline="Dashboard"
+        title={
+          welcome
+            ? "Welcome to Hive"
+            : `${greeting(new Date().getHours())}, ${getUserName()}`
+        }
+        description={
+          welcome
+            ? "Your mission control for AI coding agents working in parallel."
+            : "Here's what the swarm is up to."
+        }
+        actions={<NewProjectCta />}
+      />
 
       <div className="flex flex-col gap-4">
         <Hero
@@ -224,18 +249,29 @@ export async function Dashboard() {
           tokensThisMonth={kpis.tokensThisMonth}
         />
 
-        <NeedsAttention
-          blocked={blockedSnapshots}
-          needsInput={needsInputSnapshots}
-          overdueReminders={overdueReminders}
-          tasksInReview={tasksInReview}
-          recentFailedRuns={failedRuns}
-        />
-
-        {!empty ? <ActiveNow /> : null}
+        {attentionTotal > 0 ? (
+          <div id="attention" className="scroll-mt-6">
+            <NeedsAttention
+              blocked={blockedSnapshots}
+              needsInput={needsInputSnapshots}
+              overdueReminders={overdueReminders}
+              tasksInReview={tasksInReview}
+              recentFailedRuns={failedRuns}
+            />
+          </div>
+        ) : null}
 
         {!empty ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <div id="active-now" className="scroll-mt-6">
+            <ActiveNow />
+          </div>
+        ) : null}
+
+        {!empty ? (
+          <div
+            id="activity"
+            className="grid scroll-mt-6 grid-cols-1 gap-4 lg:grid-cols-12"
+          >
             <div className="lg:col-span-8">
               <KpiCards kpis={kpis} />
             </div>
@@ -246,10 +282,20 @@ export async function Dashboard() {
         ) : null}
 
         {empty ? (
-          <NewProjectEmptyState />
+          // The first-run hero already guides setup — don't stack a second
+          // empty state under it.
+          welcome ? null : (
+            <EmptyState
+              illustration="folder"
+              title="No projects yet"
+              description="Point Hive at any folder on your machine and your agents can start working on it."
+              cta={{ label: "New project", modal: "newProject" }}
+              secondary={{ label: "Open the guided wizard", href: "/welcome" }}
+            />
+          )
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            <div className="lg:col-span-8">
+            <div id="projects" className="scroll-mt-6 lg:col-span-8">
               <ProjectsGrid
                 snapshots={snapshots}
                 tasksByProject={tasksByProject}

@@ -50,8 +50,8 @@ export function DashboardFooter({
   if (parts.length === 0) return null;
 
   return (
-    <footer className="border-t border-hive-border pt-3 text-center font-mono text-xs text-hive-muted">
-      all time: {parts.join(" · ")}
+    <footer className="animate-enter border-t border-border pb-1 pt-4 text-center font-mono text-[11px] tabular-nums text-faint">
+      all time · {parts.join(" · ")}
     </footer>
   );
 }

@@ -25,51 +25,49 @@ export function ProjectCard({ snapshot, taskCounts }: Props) {
     !!taskCounts && (taskCounts.open > 0 || taskCounts.running > 0 || !!git);
 
   return (
-    <div className="relative">
+    <div className="relative h-full">
       <Link
         href={`/projects/${config.id}`}
-        className="group block border border-hive-border bg-hive-panel p-4 transition-colors hover:border-hive-amber/60"
+        className="hive-card group flex h-full flex-col p-4 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-[0_0_32px_-16px_var(--primary)]"
       >
         <header className="flex items-start justify-between gap-3 pr-10">
-          <h2 className="text-base font-semibold text-hive-text group-hover:text-hive-amber transition-colors">
+          <h3 className="truncate text-sm font-semibold text-foreground group-hover:text-primary">
             {config.name}
-          </h2>
+          </h3>
           <StatusBadge status={state.status} />
         </header>
 
         {config.description ? (
-          <p className="mt-1 text-xs text-hive-muted line-clamp-1">
+          <p className="mt-1 line-clamp-1 text-[12px] text-muted-foreground">
             {config.description}
           </p>
         ) : null}
 
         <div className="mt-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-            [ NEXT ]
-          </span>
-          <p className="mt-1 text-sm text-hive-text/90 line-clamp-2">
+          <span className="text-[11px] font-medium text-faint">Next up</span>
+          <p className="mt-0.5 line-clamp-2 text-[13px] leading-relaxed text-foreground/90">
             {nextStep}
           </p>
         </div>
 
         {showStats ? (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest">
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {taskCounts && taskCounts.open > 0 ? (
-              <span className="border border-hive-border px-1.5 py-0.5 text-hive-text/80">
+              <span className="rounded-full bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
                 {taskCounts.open} open
               </span>
             ) : null}
             {taskCounts && taskCounts.running > 0 ? (
-              <span className="border border-hive-amber/50 px-1.5 py-0.5 text-hive-amber">
+              <span className="rounded-full bg-primary-soft px-2 py-0.5 font-mono text-[11px] text-primary">
                 {taskCounts.running} running
               </span>
             ) : null}
             {git ? (
               <span
-                className={`border px-1.5 py-0.5 ${
+                className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${
                   git.dirty
-                    ? "border-hive-amber/40 text-hive-amber"
-                    : "border-hive-green/40 text-hive-green"
+                    ? "bg-warning-soft text-warning"
+                    : "bg-success-soft text-success"
                 }`}
               >
                 {git.dirty ? "dirty" : "clean"}
@@ -78,11 +76,11 @@ export function ProjectCard({ snapshot, taskCounts }: Props) {
           </div>
         ) : null}
 
-        <footer className="mt-4 flex items-center justify-between gap-2 font-mono text-[11px] text-hive-muted">
-          <span>
+        <footer className="mt-auto flex items-center justify-between gap-2 pt-4 font-mono text-[11px] text-faint">
+          <span className="truncate">
             {lastRunAt ? `ran ${formatRelative(lastRunAt)}` : "never run"}
             {lastRunAt ? (
-              <span className="ml-2 text-hive-text/60">
+              <span className="ml-2 text-muted-foreground">
                 {lastTokens > 0
                   ? `${formatTokensOrDash(lastTokens)} tok`
                   : "—"}
@@ -90,17 +88,19 @@ export function ProjectCard({ snapshot, taskCounts }: Props) {
             ) : null}
           </span>
           {git ? (
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex shrink-0 items-center gap-1.5">
               <span
                 className={`inline-block h-1.5 w-1.5 rounded-full ${
-                  git.dirty ? "bg-hive-amber" : "bg-hive-green"
+                  git.dirty ? "bg-warning" : "bg-success"
                 }`}
                 aria-label={git.dirty ? "dirty" : "clean"}
               />
-              <code className="text-hive-text/70">{git.branch || "(detached)"}</code>
+              <code className="text-muted-foreground">
+                {git.branch || "(detached)"}
+              </code>
             </span>
           ) : (
-            <span>no git</span>
+            <span className="shrink-0">no git</span>
           )}
         </footer>
       </Link>

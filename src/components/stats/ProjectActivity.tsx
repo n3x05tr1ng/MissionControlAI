@@ -13,12 +13,12 @@ export function ProjectActivity({ projectId, days = 14 }: Props) {
   const totalTokens = data.reduce((acc, d) => acc + d.tokens, 0);
 
   return (
-    <section className="border border-hive-border bg-hive-panel">
-      <header className="flex items-center justify-between border-b border-hive-border px-4 py-2">
-        <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-          [ ACTIVITY · last {days}d ]
+    <section className="hive-card animate-enter overflow-hidden">
+      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+        <h2 className="text-[12px] font-medium text-muted-foreground">
+          Activity · last {days}d
         </h2>
-        <span className="font-mono text-[10px] text-hive-muted">
+        <span className="font-mono text-[11px] tabular-nums text-faint">
           {totalRuns} runs ·{" "}
           {totalTokens > 0
             ? `${formatTokensOrDash(totalTokens)} tok`
@@ -26,7 +26,7 @@ export function ProjectActivity({ projectId, days = 14 }: Props) {
         </span>
       </header>
       <div className="p-3">
-        <RunsChart data={data} />
+        <RunsChart data={data} frameless />
       </div>
     </section>
   );

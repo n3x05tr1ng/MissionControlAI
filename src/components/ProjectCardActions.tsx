@@ -29,8 +29,15 @@ export function ProjectCardActions({ project }: Props) {
         setOpen(false);
       }
     }
+    function onEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("mousedown", onClickOutside);
+      document.removeEventListener("keydown", onEscape);
+    };
   }, [open]);
 
   function stop(e: React.MouseEvent | React.KeyboardEvent) {
@@ -105,31 +112,46 @@ export function ProjectCardActions({ project }: Props) {
         }}
         disabled={busy}
         aria-label="Project actions"
-        className="border border-transparent bg-transparent px-2 py-0.5 font-mono text-sm leading-none text-hive-muted hover:text-hive-amber hover:border-hive-border disabled:opacity-50"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="rounded-md p-1.5 text-muted-foreground hover:bg-surface-2 hover:text-foreground disabled:opacity-50"
       >
-        {"…"}
+        <svg
+          width={16}
+          height={16}
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <circle cx="5" cy="12" r="1.6" />
+          <circle cx="12" cy="12" r="1.6" />
+          <circle cx="19" cy="12" r="1.6" />
+        </svg>
       </button>
 
       {open ? (
         <div
           ref={menuRef}
-          className="absolute right-0 top-full z-10 mt-1 min-w-[120px] border border-hive-border bg-hive-panel py-1 shadow-lg"
+          role="menu"
+          className="animate-overlay absolute right-0 top-full z-10 mt-1 min-w-[140px] rounded-md border border-border bg-popover py-1 shadow-overlay"
         >
           <button
             type="button"
+            role="menuitem"
             onClick={(e) => {
               stop(e);
               setOpen(false);
               setEditing(true);
             }}
-            className="block w-full px-3 py-1 text-left font-mono text-xs text-hive-text hover:bg-hive-amber/10 hover:text-hive-amber"
+            className="block w-full px-3 py-1.5 text-left text-[13px] text-foreground hover:bg-surface-2"
           >
             Edit
           </button>
           <button
             type="button"
+            role="menuitem"
             onClick={handleDelete}
-            className="block w-full px-3 py-1 text-left font-mono text-xs text-red-400 hover:bg-red-400/10"
+            className="block w-full px-3 py-1.5 text-left text-[13px] text-destructive hover:bg-destructive-soft"
           >
             Delete
           </button>
@@ -138,7 +160,7 @@ export function ProjectCardActions({ project }: Props) {
 
       {editing ? (
         <ProjectForm
-          title="EDIT PROJECT"
+          title="Edit project"
           submitLabel="Save"
           enableBulk={false}
           initial={{

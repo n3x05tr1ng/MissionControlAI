@@ -34,18 +34,16 @@ export function KpiCards({ kpis }: Props) {
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+    <div className="stagger-children grid h-full grid-cols-2 gap-3 md:grid-cols-4">
       {cards.map((c) => (
         <div
           key={c.label}
-          className="border border-hive-border bg-hive-panel p-3"
+          className="hive-card flex flex-col justify-between gap-2 p-4"
         >
-          <div className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            {c.label}
-          </div>
+          <div className="text-[11px] font-medium text-faint">{c.label}</div>
           <div
-            className={`mt-2 text-2xl font-semibold ${
-              c.accent ? "text-hive-amber" : "text-hive-text"
+            className={`text-2xl font-semibold tabular-nums ${
+              c.accent ? "text-primary" : "text-foreground"
             }`}
           >
             {c.value}

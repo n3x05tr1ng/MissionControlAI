@@ -24,28 +24,50 @@ type Props = {
 
 const GROUP_LIMIT = 3;
 
+const actionLinkClass =
+  "shrink-0 rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[12px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground";
+
 function Dot({ color }: { color: string }) {
   return (
     <span
       className={`mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${color}`}
-      aria-hidden
+      aria-hidden="true"
     />
   );
 }
 
 function GroupHeader({ label }: { label: string }) {
   return (
-    <div className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-      {label}
-    </div>
+    <div className="text-[11px] font-medium text-faint">{label}</div>
   );
 }
 
 function MoreLine({ n }: { n: number }) {
   if (n <= 0) return null;
+  return <li className="py-1.5 text-[11px] text-faint">…and {n} more</li>;
+}
+
+function Row({
+  dot,
+  title,
+  meta,
+  action,
+}: {
+  dot: string;
+  title: string;
+  meta: string;
+  action: React.ReactNode;
+}) {
   return (
-    <li className="px-4 py-1.5 text-[11px] text-hive-muted">
-      …and {n} more
+    <li className="-mx-2 flex items-start justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-surface-2">
+      <div className="flex min-w-0 items-start gap-2">
+        <Dot color={dot} />
+        <div className="min-w-0">
+          <p className="truncate text-[13px] text-foreground">{title}</p>
+          <p className="truncate text-[12px] text-muted-foreground">{meta}</p>
+        </div>
+      </div>
+      {action}
     </li>
   );
 }
@@ -75,48 +97,52 @@ export function NeedsAttention({
   const failedShown = recentFailedRuns.slice(0, GROUP_LIMIT);
 
   return (
-    <section className="border border-hive-amber/40 bg-hive-panel">
-      <header className="flex items-center justify-between border-b border-hive-amber/30 px-4 py-2">
-        <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-          [ NEEDS YOUR ATTENTION ]
+    <section className="hive-card animate-enter overflow-hidden border-warning/25">
+      <header className="flex items-center justify-between gap-3 border-b border-warning/15 px-4 py-2.5">
+        <h2 className="flex items-center gap-2 text-[13px] font-medium text-foreground">
+          <svg
+            width={14}
+            height={14}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="text-warning"
+          >
+            <path d="M12 3.5 21.5 20h-19z" />
+            <path d="M12 10v4M12 17.2v.3" />
+          </svg>
+          Needs your attention
         </h2>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+        <span className="rounded-full bg-warning-soft px-2 py-0.5 font-mono text-[11px] text-warning">
           {total} item{total === 1 ? "" : "s"}
         </span>
       </header>
 
-      <div className="divide-y divide-hive-border">
+      <div className="divide-y divide-border">
         {blocked.length > 0 ? (
           <div className="px-4 py-3">
-            <GroupHeader label="blocked projects" />
+            <GroupHeader label="Blocked projects" />
             <ul className="mt-1">
-              {blockedShown.map((s) => {
-                const reason = s.state.blockers[0]?.trim() || "blocked";
-                return (
-                  <li
-                    key={s.config.id}
-                    className="flex items-start justify-between gap-3 py-1.5"
-                  >
-                    <div className="flex min-w-0 items-start gap-2">
-                      <Dot color="bg-hive-red" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-hive-text">
-                          {s.config.name}
-                        </p>
-                        <p className="truncate text-xs text-hive-muted">
-                          {reason}
-                        </p>
-                      </div>
-                    </div>
+              {blockedShown.map((s) => (
+                <Row
+                  key={s.config.id}
+                  dot="bg-destructive"
+                  title={s.config.name}
+                  meta={s.state.blockers[0]?.trim() || "blocked"}
+                  action={
                     <Link
                       href={`/projects/${s.config.id}`}
-                      className="shrink-0 border border-hive-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber hover:border-hive-amber"
+                      className={actionLinkClass}
                     >
-                      open
+                      Open
                     </Link>
-                  </li>
-                );
-              })}
+                  }
+                />
+              ))}
               <MoreLine n={blocked.length - blockedShown.length} />
             </ul>
           </div>
@@ -124,35 +150,24 @@ export function NeedsAttention({
 
         {needsInput.length > 0 ? (
           <div className="px-4 py-3">
-            <GroupHeader label="needs input" />
+            <GroupHeader label="Needs input" />
             <ul className="mt-1">
-              {needsInputShown.map((s) => {
-                const question = s.state.openQuestions[0]?.trim() || "awaiting input";
-                return (
-                  <li
-                    key={s.config.id}
-                    className="flex items-start justify-between gap-3 py-1.5"
-                  >
-                    <div className="flex min-w-0 items-start gap-2">
-                      <Dot color="bg-hive-cyan" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-hive-text">
-                          {s.config.name}
-                        </p>
-                        <p className="truncate text-xs text-hive-muted">
-                          {question}
-                        </p>
-                      </div>
-                    </div>
+              {needsInputShown.map((s) => (
+                <Row
+                  key={s.config.id}
+                  dot="bg-info"
+                  title={s.config.name}
+                  meta={s.state.openQuestions[0]?.trim() || "awaiting input"}
+                  action={
                     <Link
                       href={`/projects/${s.config.id}`}
-                      className="shrink-0 border border-hive-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber hover:border-hive-amber"
+                      className={actionLinkClass}
                     >
-                      open
+                      Answer
                     </Link>
-                  </li>
-                );
-              })}
+                  }
+                />
+              ))}
               <MoreLine n={needsInput.length - needsInputShown.length} />
             </ul>
           </div>
@@ -160,27 +175,16 @@ export function NeedsAttention({
 
         {overdueReminders.length > 0 ? (
           <div className="px-4 py-3">
-            <GroupHeader label="overdue reminders" />
+            <GroupHeader label="Overdue reminders" />
             <ul className="mt-1">
               {remindersShown.map((r) => (
-                <li
+                <Row
                   key={r.id}
-                  className="flex items-start justify-between gap-3 py-1.5"
-                >
-                  <div className="flex min-w-0 items-start gap-2">
-                    <Dot color="bg-hive-amber" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-hive-text">
-                        {r.message}
-                      </p>
-                      <p className="truncate text-xs text-hive-muted">
-                        {r.projectName ? `${r.projectName} · ` : ""}
-                        {formatRelative(r.due_at)}
-                      </p>
-                    </div>
-                  </div>
-                  <ReminderRowActions reminderId={r.id} />
-                </li>
+                  dot="bg-warning"
+                  title={r.message}
+                  meta={`${r.projectName ? `${r.projectName} · ` : ""}${formatRelative(r.due_at)}`}
+                  action={<ReminderRowActions reminderId={r.id} />}
+                />
               ))}
               <MoreLine n={overdueReminders.length - remindersShown.length} />
             </ul>
@@ -189,31 +193,23 @@ export function NeedsAttention({
 
         {tasksInReview.length > 0 ? (
           <div className="px-4 py-3">
-            <GroupHeader label="tasks in review" />
+            <GroupHeader label="Tasks in review" />
             <ul className="mt-1">
               {reviewShown.map((t) => (
-                <li
+                <Row
                   key={t.id}
-                  className="flex items-start justify-between gap-3 py-1.5"
-                >
-                  <div className="flex min-w-0 items-start gap-2">
-                    <Dot color="bg-hive-amber" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-hive-text">
-                        {t.title}
-                      </p>
-                      <p className="truncate text-xs text-hive-muted">
-                        ready for your eyes
-                      </p>
-                    </div>
-                  </div>
-                  <Link
-                    href={`/board?status=review&projectId=${encodeURIComponent(t.project_id)}`}
-                    className="shrink-0 border border-hive-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber hover:border-hive-amber"
-                  >
-                    review
-                  </Link>
-                </li>
+                  dot="bg-primary"
+                  title={t.title}
+                  meta="ready for your eyes"
+                  action={
+                    <Link
+                      href={`/board?status=review&projectId=${encodeURIComponent(t.project_id)}`}
+                      className={actionLinkClass}
+                    >
+                      Review
+                    </Link>
+                  }
+                />
               ))}
               <MoreLine n={tasksInReview.length - reviewShown.length} />
             </ul>
@@ -222,31 +218,23 @@ export function NeedsAttention({
 
         {recentFailedRuns.length > 0 ? (
           <div className="px-4 py-3">
-            <GroupHeader label="failed runs · last 24h" />
+            <GroupHeader label="Failed runs · last 24h" />
             <ul className="mt-1">
               {failedShown.map((s) => (
-                <li
+                <Row
                   key={s.id}
-                  className="flex items-start justify-between gap-3 py-1.5"
-                >
-                  <div className="flex min-w-0 items-start gap-2">
-                    <Dot color="bg-hive-yellow" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-hive-text">
-                        {s.projectName}
-                      </p>
-                      <p className="truncate text-xs text-hive-muted">
-                        {formatRelative(s.started_at)} · {s.model}
-                      </p>
-                    </div>
-                  </div>
-                  <Link
-                    href={`/projects/${s.project_id}?tab=sessions`}
-                    className="shrink-0 border border-hive-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-hive-amber hover:border-hive-amber"
-                  >
-                    inspect
-                  </Link>
-                </li>
+                  dot="bg-destructive"
+                  title={s.projectName}
+                  meta={`${formatRelative(s.started_at)} · ${s.model}`}
+                  action={
+                    <Link
+                      href={`/projects/${s.project_id}?tab=sessions`}
+                      className={actionLinkClass}
+                    >
+                      Inspect
+                    </Link>
+                  }
+                />
               ))}
               <MoreLine n={recentFailedRuns.length - failedShown.length} />
             </ul>
