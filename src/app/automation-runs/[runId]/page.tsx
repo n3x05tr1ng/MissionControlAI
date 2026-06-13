@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 
 import { FinalOutputPanel } from "@/components/automations/FinalOutputPanel";
 import { RunAutoRefresh } from "@/components/automations/RunAutoRefresh";
+import { RunStatusBadge } from "@/components/automations/RunStatusBadge";
 import { RunStopButton } from "@/components/automations/RunStopButton";
 import { RunTimeline } from "@/components/automations/RunTimeline";
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Automation, AutomationRun } from "@/lib/contracts";
 import { getAutomation } from "@/lib/repos/automations";
 import { getRun } from "@/lib/repos/automationRuns";
@@ -30,21 +32,6 @@ function safeGetAutomation(id: string): Automation | null {
   }
 }
 
-function statusClass(status: AutomationRun["status"]): string {
-  switch (status) {
-    case "running":
-      return "border-hive-amber/60 text-hive-amber";
-    case "awaiting_human":
-      return "border-yellow-300/60 text-yellow-300";
-    case "done":
-      return "border-emerald-400/60 text-emerald-400";
-    case "error":
-      return "border-red-400/60 text-red-400";
-    default:
-      return "border-hive-border text-hive-muted";
-  }
-}
-
 export default async function AutomationRunPage({
   params,
 }: {
@@ -56,63 +43,64 @@ export default async function AutomationRunPage({
   const automation = safeGetAutomation(run.automationId);
 
   const isLive = run.status === "running" || run.status === "awaiting_human";
+  const meta = [
+    `Run ${run.id.slice(0, 8)}`,
+    `started ${formatRelative(run.startedAt)} (${formatIso(run.startedAt)})`,
+    run.endedAt ? `ended ${formatRelative(run.endedAt)}` : null,
+    `triggered ${run.triggeredBy === "manual" ? "manually" : `by ${run.triggeredBy}`}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <section className="max-w-[1400px] flex flex-col gap-5">
+    <section className="mx-auto max-w-5xl">
       <RunAutoRefresh runId={runId} active={isLive} />
 
-      <nav className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-        <Link href="/automations" className="hover:text-hive-amber">
-          ← Automations
+      <nav
+        aria-label="Breadcrumb"
+        className="animate-enter mb-4 flex items-center gap-1.5 text-[12px] text-faint"
+      >
+        <Link href="/automations" className="hover:text-foreground">
+          Automations
         </Link>
         {automation ? (
           <>
-            <span>/</span>
+            <span aria-hidden="true">/</span>
             <Link
               href={`/automations/${automation.id}`}
-              className="hover:text-hive-amber"
+              className="truncate hover:text-foreground"
             >
               {automation.name}
             </Link>
           </>
         ) : null}
+        <span aria-hidden="true">/</span>
+        <span className="font-mono text-muted-foreground">
+          {run.id.slice(0, 8)}
+        </span>
       </nav>
 
-      <header className="flex flex-col gap-3 border border-hive-border bg-hive-panel p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="font-sans text-xl text-hive-text">
-              {automation?.name ?? "Run"}{" "}
-              <span className="font-mono text-xs text-hive-muted">
-                · {run.id.slice(0, 8)}
-              </span>
-            </h1>
-            <p className="mt-1 font-mono text-[11px] text-hive-muted">
-              started {formatRelative(run.startedAt)} ({formatIso(run.startedAt)})
-              {run.endedAt
-                ? ` · ended ${formatRelative(run.endedAt)}`
-                : null}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`border px-2 py-1 font-mono text-[10px] uppercase tracking-widest ${statusClass(run.status)}`}
-            >
-              {run.status}
-            </span>
+      <PageHeader
+        overline="Automation Run"
+        title={automation?.name ?? "Run"}
+        description={meta}
+        actions={
+          <>
+            <RunStatusBadge status={run.status} />
             {isLive ? <RunStopButton runId={run.id} /> : null}
-          </div>
-        </div>
-        {run.error ? (
-          <p className="border border-red-400/40 bg-red-400/5 px-2 py-1 font-mono text-xs text-red-400">
-            {run.error}
-          </p>
-        ) : null}
-      </header>
+          </>
+        }
+      />
 
-      <section>
-        <h2 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-          [ TIMELINE ]
+      {run.error ? (
+        <p className="animate-enter mb-6 rounded-md border border-destructive/40 bg-destructive-soft px-3 py-2 font-mono text-xs text-destructive">
+          {run.error}
+        </p>
+      ) : null}
+
+      <section aria-label="Run timeline" className="mb-6">
+        <h2 className="mb-3 text-[13px] font-medium text-foreground">
+          Timeline
         </h2>
         <RunTimeline run={run} steps={automation?.steps ?? []} />
       </section>

@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { PROFILE_ICON_NAMES, ProfileIcon } from "@/components/icons/ProfileIcons";
-import { notify } from "@/lib/ui/notify";
+import {
+  PROFILE_ICON_NAMES,
+  ProfileIcon,
+} from "@/components/icons/ProfileIcons";
+import {
+  createAutomation,
+  createAutomationFromTemplate,
+} from "@/components/automations/templateActions";
 import type { Automation } from "@/lib/contracts";
+import { notify } from "@/lib/ui/notify";
 
 type Props = {
   open: boolean;
@@ -23,30 +30,9 @@ const COLORS = [
   "#9fa8b3",
 ];
 
-type TemplateOption = {
-  id: string;
-  label: string;
-  description: string;
-};
-
-const TEMPLATE_OPTIONS: TemplateOption[] = [
-  { id: "blank", label: "Blank", description: "Start from scratch" },
-  {
-    id: "content-pipeline",
-    label: "Content Pipeline",
-    description: "Researcher → Writer → Director review",
-  },
-  {
-    id: "daily-standup",
-    label: "Daily Project Standup",
-    description: "Cross-project status summary",
-  },
-  {
-    id: "bug-triage",
-    label: "Bug Triage Loop",
-    description: "Triage agent + reviewer loop",
-  },
-];
+const inputClass =
+  "h-9 rounded-md border border-input bg-background px-2.5 text-[13px] text-foreground placeholder:text-faint";
+const labelClass = "text-[12px] font-medium text-muted-foreground";
 
 export function NewAutomationModal(props: Props) {
   if (!props.open) return null;
@@ -60,9 +46,49 @@ function NewAutomationModalInner({ onClose, onCreated }: Props) {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<string>(COLORS[0]);
   const [icon, setIcon] = useState<string>("blueprint");
-  const [template, setTemplate] = useState<string>("blank");
+  const [templates, setTemplates] = useState<Automation[]>([]);
+  const [templateId, setTemplateId] = useState<string>("blank");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Plantillas reales desde la API (las hardcodeadas anteriores no clonaban).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/automations", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<Automation[]>) : []))
+      .then((list) => {
+        if (!cancelled && Array.isArray(list)) {
+          setTemplates(list.filter((a) => a.isTemplate));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTemplates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Escape cierra (si no está creando).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !busy) onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onClose]);
+
+  function pickTemplate(id: string) {
+    setTemplateId(id);
+    if (id === "blank") return;
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    // Prefill útil sin pisar lo que el usuario ya escribió.
+    if (!name.trim()) setName(t.name);
+    if (!description.trim() && t.description) setDescription(t.description);
+    setColor(t.color);
+    setIcon(t.icon);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,24 +99,25 @@ function NewAutomationModalInner({ onClose, onCreated }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const body: Record<string, unknown> = {
-        name: name.trim(),
-        color,
-        icon,
-      };
-      if (description.trim()) body.description = description.trim();
-      if (template !== "blank") body.fromTemplateId = template;
+      const template =
+        templateId !== "blank"
+          ? (templates.find((t) => t.id === templateId) ?? null)
+          : null;
 
-      const res = await fetch("/api/automations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(j.error ?? `HTTP ${res.status}`);
-      }
-      const created = (await res.json()) as Automation;
+      const created = template
+        ? await createAutomationFromTemplate(template, {
+            name: name.trim(),
+            description: description.trim() || null,
+            color,
+            icon,
+          })
+        : await createAutomation({
+            name: name.trim(),
+            description: description.trim() || null,
+            color,
+            icon,
+          });
+
       notify.success("Automation created");
       if (onCreated) onCreated(created);
       onClose();
@@ -107,77 +134,83 @@ function NewAutomationModalInner({ onClose, onCreated }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="hive-modal-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]"
       onClick={() => !busy && onClose()}
     >
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg border border-hive-border bg-hive-panel p-5 flex flex-col gap-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-automation-title"
+        className="glass animate-overlay flex max-h-[85vh] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-xl p-5 shadow-overlay"
       >
-        <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-          [ NEW AUTOMATION ]
+        <h2
+          id="new-automation-title"
+          className="text-[15px] font-semibold text-foreground"
+        >
+          New automation
         </h2>
 
-        <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            Name
-          </span>
+        <label className="flex flex-col gap-1.5">
+          <span className={labelClass}>Name</span>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="bg-hive-bg border border-hive-border px-2 py-1.5 text-sm text-hive-text focus:border-hive-amber focus:outline-none"
+            className={inputClass}
+            placeholder="e.g. Weekly changelog digest"
             autoFocus
           />
         </label>
 
-        <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            Description (optional)
-          </span>
+        <label className="flex flex-col gap-1.5">
+          <span className={labelClass}>Description (optional)</span>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="bg-hive-bg border border-hive-border px-2 py-1.5 text-sm text-hive-text resize-none focus:border-hive-amber focus:outline-none"
+            placeholder="What does this pipeline do?"
+            className="resize-none rounded-md border border-input bg-background px-2.5 py-1.5 text-[13px] text-foreground placeholder:text-faint"
           />
         </label>
 
-        <div className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            Color
-          </span>
+        <div className="flex flex-col gap-1.5">
+          <span className={labelClass}>Color</span>
           <div className="flex flex-wrap gap-2">
             {COLORS.map((c) => (
               <button
                 key={c}
                 type="button"
                 onClick={() => setColor(c)}
-                className={`h-6 w-6 border-2 transition-transform ${color === c ? "scale-110 border-hive-text" : "border-hive-border"}`}
+                className={`h-6 w-6 rounded-full border-2 ${
+                  color === c
+                    ? "scale-110 border-foreground"
+                    : "border-transparent"
+                }`}
                 style={{ backgroundColor: c }}
-                aria-label={`color ${c}`}
+                aria-label={`Color ${c}`}
+                aria-pressed={color === c}
               />
             ))}
           </div>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            Icon
-          </span>
+        <div className="flex flex-col gap-1.5">
+          <span className={labelClass}>Icon</span>
           <div className="flex flex-wrap gap-1.5">
             {PROFILE_ICON_NAMES.map((n) => (
               <button
                 key={n}
                 type="button"
                 onClick={() => setIcon(n)}
-                className={`flex h-8 w-8 items-center justify-center border transition-colors ${
+                className={`flex h-8 w-8 items-center justify-center rounded-md border ${
                   icon === n
-                    ? "border-hive-amber text-hive-amber"
-                    : "border-hive-border text-hive-muted hover:text-hive-text"
+                    ? "border-primary bg-primary-soft text-primary"
+                    : "border-border text-muted-foreground hover:bg-surface-2 hover:text-foreground"
                 }`}
-                aria-label={`icon ${n}`}
+                aria-label={`Icon ${n}`}
+                aria-pressed={icon === n}
               >
                 <ProfileIcon name={n} size={16} />
               </button>
@@ -185,45 +218,92 @@ function NewAutomationModalInner({ onClose, onCreated }: Props) {
           </div>
         </div>
 
-        <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            Start from template
-          </span>
-          <select
-            value={template}
-            onChange={(e) => setTemplate(e.target.value)}
-            className="bg-hive-bg border border-hive-border px-2 py-1.5 text-sm text-hive-text focus:border-hive-amber focus:outline-none"
-          >
-            {TEMPLATE_OPTIONS.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label} — {t.description}
-              </option>
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className={labelClass}>Start from</legend>
+          <div className="mt-1.5 flex flex-col gap-1.5">
+            <TemplateOptionRow
+              checked={templateId === "blank"}
+              onSelect={() => pickTemplate("blank")}
+              title="Blank"
+              description="Start from scratch"
+            />
+            {templates.map((t) => (
+              <TemplateOptionRow
+                key={t.id}
+                checked={templateId === t.id}
+                onSelect={() => pickTemplate(t.id)}
+                title={t.name}
+                description={
+                  t.description ??
+                  `${t.steps.length} step${t.steps.length === 1 ? "" : "s"}`
+                }
+              />
             ))}
-          </select>
-        </label>
+          </div>
+        </fieldset>
 
         {error ? (
-          <p className="font-mono text-[11px] text-red-400">{error}</p>
+          <p className="rounded-md border border-destructive/40 bg-destructive-soft px-2.5 py-1.5 text-[12px] text-destructive">
+            {error}
+          </p>
         ) : null}
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-end gap-2 pt-1">
           <button
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="border border-hive-border px-3 py-1 text-xs uppercase tracking-widest text-hive-muted hover:text-hive-text"
+            className="h-9 rounded-md border border-border bg-surface-2 px-3 text-[13px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground disabled:opacity-50"
           >
-            cancel
+            Cancel
           </button>
           <button
             type="submit"
             disabled={busy}
-            className="border border-hive-amber bg-hive-amber/10 px-3 py-1 text-xs uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20 disabled:opacity-50"
+            className="h-9 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-primary-hover hover:shadow-glow disabled:opacity-50"
           >
-            {busy ? "creating…" : "create"}
+            {busy ? "Creating…" : "Create automation"}
           </button>
         </div>
       </form>
     </div>
+  );
+}
+
+function TemplateOptionRow({
+  checked,
+  onSelect,
+  title,
+  description,
+}: {
+  checked: boolean;
+  onSelect: () => void;
+  title: string;
+  description: string;
+}) {
+  return (
+    <label
+      className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 ${
+        checked
+          ? "border-primary/50 bg-primary-soft"
+          : "border-border hover:bg-surface-2"
+      }`}
+    >
+      <input
+        type="radio"
+        name="automation-template"
+        checked={checked}
+        onChange={onSelect}
+        className="accent-primary"
+      />
+      <span className="min-w-0">
+        <span className="block truncate text-[13px] font-medium text-foreground">
+          {title}
+        </span>
+        <span className="block truncate text-[12px] text-muted-foreground">
+          {description}
+        </span>
+      </span>
+    </label>
   );
 }

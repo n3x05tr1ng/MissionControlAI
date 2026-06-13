@@ -46,6 +46,17 @@ const STEP_TYPE_OPTIONS: ReadonlyArray<{
   { value: "human_review", label: "Human review" },
 ];
 
+// Chips de tipo de paso con tokens -soft (agent ámbar, review cian, human amarillo)
+const STEP_TYPE_CHIP: Record<AutomationStepType, string> = {
+  agent: "bg-primary-soft text-primary",
+  review_agent: "bg-info-soft text-info",
+  human_review: "bg-warning-soft text-warning",
+};
+
+const labelClass = "text-[12px] font-medium text-muted-foreground";
+const fieldClass =
+  "h-9 rounded-md border border-input bg-background px-2.5 text-[13px] text-foreground";
+
 export function AutomationStepsEditor({ automationId, initialSteps }: Props) {
   const [steps, setSteps] = useState<DraftStep[]>(initialSteps);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
@@ -153,7 +164,12 @@ export function AutomationStepsEditor({ automationId, initialSteps }: Props) {
         body: JSON.stringify({ type: "agent" }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const created = (await res.json()) as AutomationStep;
+      // La API responde { ok, step }; tolera también el shape plano.
+      const j = (await res.json()) as
+        | { step?: AutomationStep }
+        | AutomationStep;
+      const created = ("step" in j && j.step ? j.step : j) as AutomationStep;
+      if (!created?.id) throw new Error("Malformed response from API");
       setSteps((prev) => [...prev, created]);
       notify.success("Step added");
     } catch (err) {
@@ -166,6 +182,7 @@ export function AutomationStepsEditor({ automationId, initialSteps }: Props) {
       title: "Delete step?",
       message: "This will remove the step from the automation.",
       confirmLabel: "Delete",
+      danger: true,
     });
     if (!ok) return;
     try {
@@ -205,16 +222,14 @@ export function AutomationStepsEditor({ automationId, initialSteps }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <section className="animate-enter flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-          [ STEPS ]
-        </h2>
+        <h2 className="text-[13px] font-medium text-foreground">Steps</h2>
         <SaveBadge state={saveState} />
       </div>
 
       {steps.length === 0 ? (
-        <p className="border border-hive-border bg-hive-panel p-4 text-sm text-hive-muted">
+        <p className="rounded-lg border border-dashed border-border-strong bg-surface-1 p-6 text-center text-[13px] text-muted-foreground">
           No steps yet. Add the first one below.
         </p>
       ) : (
@@ -227,12 +242,13 @@ export function AutomationStepsEditor({ automationId, initialSteps }: Props) {
             items={steps.map((s) => s.id)}
             strategy={verticalListSortingStrategy}
           >
-            <div className="flex flex-col gap-3">
+            <ol className="flex flex-col">
               {steps.map((step, idx) => (
                 <SortableStepCard
                   key={step.id}
                   step={step}
                   index={idx}
+                  isLast={idx === steps.length - 1}
                   earlierSteps={steps.slice(0, idx)}
                   profiles={profiles}
                   onUpdateLocal={updateLocal}
@@ -240,7 +256,7 @@ export function AutomationStepsEditor({ automationId, initialSteps }: Props) {
                   onDelete={() => void removeStep(step.id)}
                 />
               ))}
-            </div>
+            </ol>
           </SortableContext>
         </DndContext>
       )}
@@ -248,11 +264,19 @@ export function AutomationStepsEditor({ automationId, initialSteps }: Props) {
       <button
         type="button"
         onClick={() => void addStep()}
-        className="self-start border border-hive-amber bg-hive-amber/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20"
+        className="inline-flex h-9 items-center gap-1.5 self-start rounded-md border border-border bg-surface-2 px-3 text-[13px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground"
       >
-        + Add step
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path
+            d="M7 2.5v9M2.5 7h9"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+        Add step
       </button>
-    </div>
+    </section>
   );
 }
 
@@ -261,17 +285,18 @@ function SaveBadge({ state }: { state: SaveState }) {
   const label =
     state === "saving" ? "saving…" : state === "saved" ? "saved" : "error";
   const color =
-    state === "error" ? "text-red-400" : "text-hive-muted";
-  return (
-    <span className={`font-mono text-[10px] uppercase tracking-widest ${color}`}>
-      {label}
-    </span>
-  );
+    state === "error"
+      ? "text-destructive"
+      : state === "saved"
+        ? "text-success"
+        : "text-faint";
+  return <span className={`font-mono text-[11px] ${color}`}>{label}</span>;
 }
 
 type StepCardProps = {
   step: DraftStep;
   index: number;
+  isLast: boolean;
   earlierSteps: DraftStep[];
   profiles: AgentProfile[];
   onUpdateLocal: (stepId: string, patch: Partial<AutomationStep>) => void;
@@ -288,9 +313,9 @@ function SortableStepCard(props: StepCardProps) {
     opacity: isDragging ? 0.6 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style}>
+    <li ref={setNodeRef} style={style} className="list-none">
       <StepCard {...props} dragHandle={{ ...attributes, ...listeners }} />
-    </div>
+    </li>
   );
 }
 
@@ -301,6 +326,7 @@ type StepCardInnerProps = StepCardProps & {
 function StepCard({
   step,
   index,
+  isLast,
   earlierSteps,
   profiles,
   onUpdateLocal,
@@ -346,183 +372,182 @@ function StepCard({
     onPatch(step.id, { waitForHuman: value });
   }
 
-  const typeColor =
-    step.type === "review_agent"
-      ? "text-hive-cyan border-hive-cyan/40"
-      : step.type === "human_review"
-        ? "text-yellow-300 border-yellow-300/40"
-        : "text-hive-amber border-hive-amber/40";
+  const chip = STEP_TYPE_CHIP[step.type] ?? STEP_TYPE_CHIP.agent;
 
   return (
-    <div className="border border-hive-border bg-hive-panel">
-      <header className="flex items-center justify-between gap-2 border-b border-hive-border bg-hive-bg/30 px-3 py-2">
-        <div className="flex items-center gap-2">
+    <div className={`flex gap-3 ${isLast ? "" : "pb-3"}`}>
+      {/* Riel: número de paso + conector hairline hacia el siguiente */}
+      <div className="flex flex-col items-center" aria-hidden="true">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 font-mono text-[11px] text-muted-foreground">
+          {index + 1}
+        </span>
+        {isLast ? null : <span className="mt-1 w-px flex-1 bg-border" />}
+      </div>
+
+      <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-border bg-surface-1 shadow-bevel">
+        <header className="flex items-center justify-between gap-2 border-b border-border bg-surface-2/50 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              {...dragHandle}
+              className="cursor-grab rounded-xs px-1 font-mono text-[12px] text-faint hover:text-foreground"
+              aria-label="Drag to reorder"
+              title="Drag to reorder"
+            >
+              ⋮⋮
+            </button>
+            <span className="font-mono text-[11px] text-faint">
+              Step {index + 1}
+            </span>
+            <span
+              className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-medium ${chip}`}
+            >
+              {step.type.replace("_", " ")}
+            </span>
+          </div>
           <button
             type="button"
-            {...dragHandle}
-            className="cursor-grab font-mono text-[11px] text-hive-muted hover:text-hive-text"
-            aria-label="Drag to reorder"
-            title="Drag to reorder"
+            onClick={onDelete}
+            className="text-[12px] font-medium text-faint hover:text-destructive"
           >
-            ⋮⋮
+            Delete
           </button>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-            Step {index + 1}
-          </span>
-          <span
-            className={`border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest ${typeColor}`}
-          >
-            {step.type.replace("_", " ")}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="font-mono text-[10px] uppercase tracking-widest text-hive-muted hover:text-red-400"
-        >
-          Delete
-        </button>
-      </header>
+        </header>
 
-      <div className="flex flex-col gap-3 p-3">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Type
-            </span>
-            <select
-              value={step.type}
-              onChange={(e) =>
-                changeType(e.target.value as AutomationStepType)
-              }
-              className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-            >
-              {STEP_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {step.type !== "human_review" ? (
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                Profile
-              </span>
-              <div className="flex items-center gap-2">
-                {profile ? (
-                  <span
-                    className="flex h-7 w-7 shrink-0 items-center justify-center border border-hive-border"
-                    style={{ color: profile.color }}
-                  >
-                    <ProfileIcon name={profile.icon} size={16} />
-                  </span>
-                ) : null}
-                <select
-                  value={step.profileId ?? ""}
-                  onChange={(e) => changeProfile(e.target.value)}
-                  className="flex-1 bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-                >
-                  <option value="">— select profile —</option>
-                  <optgroup label="Templates">
-                    {profiles
-                      .filter((p) => p.isTemplate)
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="Custom">
-                    {profiles
-                      .filter((p) => !p.isTemplate)
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                  </optgroup>
-                </select>
-              </div>
-            </label>
-          ) : null}
-        </div>
-
-        {step.type !== "human_review" ? (
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-              Prompt
-            </span>
-            <textarea
-              value={step.prompt ?? ""}
-              onChange={(e) => changePrompt(e.target.value)}
-              rows={6}
-              className="bg-hive-bg border border-hive-border px-2 py-1.5 font-mono text-xs text-hive-text resize-y focus:border-hive-amber focus:outline-none"
-              placeholder={
-                step.type === "review_agent"
-                  ? "Review the previous output. Reply APPROVE or REJECT: <reason>."
-                  : "What should this agent do? Use {{step1.output}} to reference previous steps."
-              }
-            />
-            <span className="font-mono text-[9px] text-hive-muted">
-              Use <code>{"{{stepN.output}}"}</code> to reference an earlier
-              step.
-            </span>
-          </label>
-        ) : null}
-
-        {step.type === "review_agent" ? (
+        <div className="flex flex-col gap-3 p-3">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                Reviews step
-              </span>
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>Type</span>
               <select
-                value={step.reviewsStepId ?? ""}
-                onChange={(e) => changeReviewsStep(e.target.value)}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
+                value={step.type}
+                onChange={(e) =>
+                  changeType(e.target.value as AutomationStepType)
+                }
+                className={fieldClass}
               >
-                <option value="">— select step —</option>
-                {earlierSteps.map((s, i) => (
-                  <option key={s.id} value={s.id}>
-                    Step {i + 1} ({s.type.replace("_", " ")})
+                {STEP_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
                   </option>
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-                Max retries
-              </span>
-              <input
-                type="number"
-                min={1}
-                max={5}
-                value={step.maxRetries}
-                onChange={(e) => changeMaxRetries(Number(e.target.value))}
-                className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text"
-              />
-            </label>
+
+            {step.type !== "human_review" ? (
+              <label className="flex flex-col gap-1.5">
+                <span className={labelClass}>Profile</span>
+                <div className="flex items-center gap-2">
+                  {profile ? (
+                    <span
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border"
+                      style={{
+                        color: profile.color,
+                        background: `color-mix(in srgb, ${profile.color} 12%, transparent)`,
+                      }}
+                    >
+                      <ProfileIcon name={profile.icon} size={16} />
+                    </span>
+                  ) : null}
+                  <select
+                    value={step.profileId ?? ""}
+                    onChange={(e) => changeProfile(e.target.value)}
+                    className={`flex-1 ${fieldClass}`}
+                  >
+                    <option value="">— select profile —</option>
+                    <optgroup label="Templates">
+                      {profiles
+                        .filter((p) => p.isTemplate)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Custom">
+                      {profiles
+                        .filter((p) => !p.isTemplate)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+                </div>
+              </label>
+            ) : null}
           </div>
-        ) : null}
 
-        {step.type === "human_review" ? (
-          <p className="rounded border border-yellow-300/30 bg-yellow-300/5 px-2 py-1.5 font-mono text-[11px] text-yellow-200">
-            Run will pause and wait for your approval.
-          </p>
-        ) : null}
+          {step.type !== "human_review" ? (
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>Prompt</span>
+              <textarea
+                value={step.prompt ?? ""}
+                onChange={(e) => changePrompt(e.target.value)}
+                rows={6}
+                className="resize-y rounded-md border border-input bg-background px-2.5 py-2 font-mono text-xs leading-relaxed text-foreground placeholder:text-faint"
+                placeholder={
+                  step.type === "review_agent"
+                    ? "Review the previous output. Reply APPROVE or REJECT: <reason>."
+                    : "What should this agent do? Use {{step1.output}} to reference previous steps."
+                }
+              />
+              <span className="font-mono text-[11px] text-faint">
+                Use <code>{"{{stepN.output}}"}</code> to reference an earlier
+                step.
+              </span>
+            </label>
+          ) : null}
 
-        {step.type !== "human_review" ? (
-          <label className="flex items-center gap-2 text-xs text-hive-text/90">
-            <input
-              type="checkbox"
-              checked={step.waitForHuman}
-              onChange={(e) => changeWaitForHuman(e.target.checked)}
-            />
-            <span>Pause for my approval after this step</span>
-          </label>
-        ) : null}
+          {step.type === "review_agent" ? (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1.5">
+                <span className={labelClass}>Reviews step</span>
+                <select
+                  value={step.reviewsStepId ?? ""}
+                  onChange={(e) => changeReviewsStep(e.target.value)}
+                  className={fieldClass}
+                >
+                  <option value="">— select step —</option>
+                  {earlierSteps.map((s, i) => (
+                    <option key={s.id} value={s.id}>
+                      Step {i + 1} ({s.type.replace("_", " ")})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className={labelClass}>Max retries</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={step.maxRetries}
+                  onChange={(e) => changeMaxRetries(Number(e.target.value))}
+                  className={fieldClass}
+                />
+              </label>
+            </div>
+          ) : null}
+
+          {step.type === "human_review" ? (
+            <p className="rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-[12px] text-warning">
+              Run will pause and wait for your approval.
+            </p>
+          ) : null}
+
+          {step.type !== "human_review" ? (
+            <label className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground">
+              <input
+                type="checkbox"
+                checked={step.waitForHuman}
+                onChange={(e) => changeWaitForHuman(e.target.checked)}
+                className="accent-primary"
+              />
+              <span>Pause for my approval after this step</span>
+            </label>
+          ) : null}
+        </div>
       </div>
     </div>
   );

@@ -3,27 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type { AutomationRun, AutomationRunStatus } from "@/lib/contracts";
+import { RunStatusBadge } from "@/components/automations/RunStatusBadge";
+import { Skeleton } from "@/components/ui/Skeleton";
+import type { AutomationRun } from "@/lib/contracts";
 import { formatRelative } from "@/lib/time";
 
 type Props = {
   automationId: string;
 };
-
-function statusClass(status: AutomationRunStatus): string {
-  switch (status) {
-    case "running":
-      return "border-hive-amber/60 text-hive-amber";
-    case "awaiting_human":
-      return "border-yellow-300/60 text-yellow-300";
-    case "done":
-      return "border-emerald-400/60 text-emerald-400";
-    case "error":
-      return "border-red-400/60 text-red-400";
-    default:
-      return "border-hive-border text-hive-muted";
-  }
-}
 
 function duration(startedAt: string, endedAt: string | null): string {
   const start = Date.parse(startedAt);
@@ -64,47 +51,60 @@ export function RecentRunsPanel({ automationId }: Props) {
   }, [automationId]);
 
   return (
-    <section className="border border-hive-border bg-hive-panel">
-      <header className="flex items-center justify-between gap-2 border-b border-hive-border px-3 py-2">
-        <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-          [ RECENT RUNS ]
+    <section className="hive-card animate-enter overflow-hidden">
+      <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+        <h2 className="text-[12px] font-medium text-muted-foreground">
+          Recent runs
         </h2>
         {error ? (
-          <span
-            className="font-mono text-[10px] text-hive-muted"
-            title={error}
-          >
+          <span className="font-mono text-[11px] text-faint" title={error}>
             API not ready
           </span>
         ) : null}
       </header>
 
       {runs === null ? (
-        <p className="p-3 font-mono text-[11px] uppercase tracking-widest text-hive-muted">
-          loading…
-        </p>
+        <div className="flex flex-col gap-2 p-4">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-5/6" />
+          <Skeleton className="h-5 w-2/3" />
+        </div>
       ) : runs.length === 0 ? (
-        <p className="p-3 text-sm text-hive-muted">No runs yet.</p>
+        <p className="p-4 text-[13px] text-muted-foreground">
+          No runs yet. Use “Run now” above to start the first one.
+        </p>
       ) : (
-        <ul className="divide-y divide-hive-border">
+        <ul className="stagger-children divide-y divide-border">
           {runs.map((r) => (
-            <li
-              key={r.id}
-              className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-            >
-              <span
-                className={`font-mono text-[10px] uppercase tracking-widest border px-1.5 py-0.5 ${statusClass(r.status)}`}
-              >
-                {r.status}
-              </span>
-              <span className="text-hive-muted font-mono text-[11px] flex-1">
-                {formatRelative(r.startedAt)} · {duration(r.startedAt, r.endedAt)}
-              </span>
+            <li key={r.id}>
               <Link
                 href={`/automation-runs/${r.id}`}
-                className="font-mono text-[10px] uppercase tracking-widest text-hive-amber hover:underline"
+                className="group flex min-h-11 items-center gap-3 px-4 py-1.5 hover:bg-surface-2"
               >
-                View →
+                <RunStatusBadge status={r.status} />
+                <span className="flex-1 truncate font-mono text-[12px] text-muted-foreground">
+                  {formatRelative(r.startedAt)} ·{" "}
+                  {duration(r.startedAt, r.endedAt)}
+                </span>
+                <span className="font-mono text-[11px] text-faint">
+                  {r.triggeredBy}
+                </span>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  aria-hidden="true"
+                  className="text-faint group-hover:text-foreground"
+                >
+                  <path
+                    d="m5 3.5 4 3.5-4 3.5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </Link>
             </li>
           ))}

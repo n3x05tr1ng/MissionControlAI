@@ -37,8 +37,8 @@ export function HumanReviewForm({ runId }: Props) {
   }
 
   return (
-    <div className="mt-3 flex flex-col gap-2 border border-yellow-300/40 bg-yellow-300/5 p-3">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-yellow-300">
+    <div className="mt-3 flex flex-col gap-2.5 rounded-lg border border-warning/40 bg-warning-soft p-3">
+      <span className="text-[12px] font-medium text-warning">
         Your decision
       </span>
       <textarea
@@ -46,23 +46,40 @@ export function HumanReviewForm({ runId }: Props) {
         onChange={(e) => setComment(e.target.value)}
         placeholder="Optional comment / feedback…"
         rows={3}
-        className="bg-hive-bg border border-hive-border px-2 py-1 text-sm text-hive-text resize-none focus:border-hive-amber focus:outline-none"
+        className="resize-none rounded-md border border-input bg-background px-2.5 py-1.5 text-[13px] text-foreground placeholder:text-faint"
       />
       <div className="flex gap-2">
         <button
           type="button"
           onClick={() => void decide("approve")}
           disabled={busy}
-          className="border border-emerald-400 bg-emerald-400/10 px-3 py-1 font-mono text-xs uppercase tracking-widest text-emerald-400 hover:bg-emerald-400/20 disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-success/40 bg-success-soft px-3 text-[13px] font-medium text-success hover:bg-success/25 disabled:opacity-50"
         >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path
+              d="m2.5 7.5 3 3 6-6.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
           Approve
         </button>
         <button
           type="button"
           onClick={() => void decide("reject")}
           disabled={busy}
-          className="border border-red-400 bg-red-400/10 px-3 py-1 font-mono text-xs uppercase tracking-widest text-red-400 hover:bg-red-400/20 disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive-soft px-3 text-[13px] font-medium text-destructive hover:bg-destructive/25 disabled:opacity-50"
         >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path
+              d="m3.5 3.5 7 7m0-7-7 7"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
           Reject
         </button>
       </div>

@@ -29,11 +29,18 @@ export default async function AutomationEditorPage({
   if (!automation) notFound();
 
   return (
-    <section className="max-w-[1400px] flex flex-col gap-5">
-      <nav className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-hive-muted">
-        <Link href="/automations" className="hover:text-hive-amber">
-          ← Automations
+    <section className="mx-auto flex max-w-5xl flex-col gap-6">
+      <nav
+        aria-label="Breadcrumb"
+        className="animate-enter flex items-center gap-1.5 text-[12px] text-faint"
+      >
+        <Link href="/automations" className="hover:text-foreground">
+          Automations
         </Link>
+        <span aria-hidden="true">/</span>
+        <span className="truncate text-muted-foreground">
+          {automation.name}
+        </span>
       </nav>
 
       <AutomationEditorHeader automation={automation} />
