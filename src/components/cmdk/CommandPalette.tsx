@@ -4,6 +4,7 @@ import { Command } from "cmdk";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { HexIcon } from "@/components/icons/HexIcon";
 import { notify } from "@/lib/ui/notify";
 import { openModal } from "@/lib/ui/modalBus";
 import type { AgentProfile, ProjectConfig } from "@/lib/contracts";
@@ -23,10 +24,7 @@ const projectsCache: CacheBox<ProjectConfig[]> = { data: null, at: 0 };
 const profilesCache: CacheBox<AgentProfile[]> = { data: null, at: 0 };
 
 async function loadProjects(): Promise<ProjectConfig[]> {
-  if (
-    projectsCache.data &&
-    Date.now() - projectsCache.at < CACHE_MS
-  ) {
+  if (projectsCache.data && Date.now() - projectsCache.at < CACHE_MS) {
     return projectsCache.data;
   }
   try {
@@ -43,10 +41,7 @@ async function loadProjects(): Promise<ProjectConfig[]> {
 }
 
 async function loadProfiles(): Promise<AgentProfile[]> {
-  if (
-    profilesCache.data &&
-    Date.now() - profilesCache.at < CACHE_MS
-  ) {
+  if (profilesCache.data && Date.now() - profilesCache.at < CACHE_MS) {
     return profilesCache.data;
   }
   try {
@@ -63,6 +58,9 @@ async function loadProfiles(): Promise<AgentProfile[]> {
   }
 }
 
+const GROUP_CLS =
+  "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-faint";
+
 export function CommandPalette() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -72,8 +70,7 @@ export function CommandPalette() {
   // Global toggle
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const isToggle =
-        (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
+      const isToggle = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
       if (isToggle) {
         e.preventDefault();
         setOpen((v) => !v);
@@ -112,7 +109,9 @@ export function CommandPalette() {
       }
       const data = (await res.json()) as { stopped: number };
       if (data.stopped > 0) {
-        notify.success(`Stopped ${data.stopped} run${data.stopped === 1 ? "" : "s"}`);
+        notify.success(
+          `Stopped ${data.stopped} run${data.stopped === 1 ? "" : "s"}`,
+        );
       } else {
         notify.info("No active runs");
       }
@@ -137,41 +136,31 @@ export function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-start justify-center bg-black/60 p-4 pt-[12vh] hive-modal-overlay"
+      className="hive-modal-overlay fixed inset-0 z-[120] flex items-start justify-center bg-black/60 p-4 pt-[12vh] backdrop-blur-[2px]"
       onClick={close}
     >
       <div
-        className="w-full max-w-[640px] border border-hive-border bg-hive-panel shadow-2xl hive-modal-panel"
+        className="glass animate-overlay w-full max-w-[640px] overflow-hidden rounded-xl shadow-overlay"
         onClick={(e) => e.stopPropagation()}
       >
-        <Command
-          label="Command palette"
-          loop
-          className="flex flex-col"
-        >
-          <div className="border-b border-hive-border px-3 py-2 flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-              [ CMD ]
-            </span>
+        <Command label="Command palette" loop className="flex flex-col">
+          <div className="flex h-[52px] items-center gap-3 border-b border-border px-4">
+            <HexIcon size={15} className="shrink-0 text-primary" />
             <Command.Input
               placeholder="Type a command or search…"
               autoFocus
-              className="flex-1 bg-transparent font-mono text-sm text-hive-text outline-none placeholder:text-hive-muted"
+              className="h-full flex-1 bg-transparent font-mono text-sm text-foreground outline-none placeholder:text-faint"
             />
-            <kbd className="font-mono text-[10px] uppercase tracking-widest text-hive-muted border border-hive-border px-1.5 py-0.5">
-              esc
-            </kbd>
+            <kbd className="keycap">esc</kbd>
           </div>
           <Command.List className="max-h-[60vh] overflow-y-auto p-2">
-            <Command.Empty className="px-3 py-4 text-center font-mono text-xs text-hive-muted">
+            <Command.Empty className="px-3 py-6 text-center font-mono text-xs text-faint">
               no results.
             </Command.Empty>
 
-            <Command.Group
-              heading="Navigation"
-              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest [&_[cmdk-group-heading]]:text-hive-muted"
-            >
+            <Command.Group heading="Navigation" className={GROUP_CLS}>
               <PaletteItem onSelect={() => go("/")}>Go to Dashboard</PaletteItem>
+              <PaletteItem onSelect={() => go("/board")}>Go to Board</PaletteItem>
               <PaletteItem onSelect={() => go("/automations")}>Go to Automations</PaletteItem>
               <PaletteItem onSelect={() => go("/profiles")}>Go to Profiles</PaletteItem>
               <PaletteItem onSelect={() => go("/assistant")}>Go to Assistant</PaletteItem>
@@ -179,10 +168,7 @@ export function CommandPalette() {
               <PaletteItem onSelect={() => go("/settings")}>Go to Settings</PaletteItem>
             </Command.Group>
 
-            <Command.Group
-              heading="Create"
-              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest [&_[cmdk-group-heading]]:text-hive-muted"
-            >
+            <Command.Group heading="Create" className={GROUP_CLS}>
               <PaletteItem onSelect={() => trigger("newProject")}>+ New project</PaletteItem>
               <PaletteItem onSelect={() => trigger("newTask")}>+ New task</PaletteItem>
               <PaletteItem onSelect={() => trigger("newProfile")}>+ New profile</PaletteItem>
@@ -191,54 +177,47 @@ export function CommandPalette() {
             </Command.Group>
 
             {projects.length > 0 ? (
-              <Command.Group
-                heading="Projects"
-                className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest [&_[cmdk-group-heading]]:text-hive-muted"
-              >
+              <Command.Group heading="Projects" className={GROUP_CLS}>
                 {projects.map((p) => (
                   <PaletteItem
                     key={`proj-${p.id}`}
                     value={`open project ${p.name} ${p.id}`}
                     onSelect={() => go(`/projects/${p.id}`)}
                   >
-                    Open <span className="text-hive-amber">{p.name}</span>
+                    Open <span className="text-primary">{p.name}</span>
                   </PaletteItem>
                 ))}
               </Command.Group>
             ) : null}
 
             {profiles.length > 0 ? (
-              <Command.Group
-                heading="Profiles"
-                className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest [&_[cmdk-group-heading]]:text-hive-muted"
-              >
+              <Command.Group heading="Profiles" className={GROUP_CLS}>
                 {profiles.map((p) => (
                   <PaletteItem
                     key={`prof-${p.id}`}
                     value={`edit profile ${p.name} ${p.id}`}
                     onSelect={() => go(`/profiles/${p.id}`)}
                   >
-                    Edit profile: <span className="text-hive-amber">{p.name}</span>
+                    Edit profile: <span className="text-primary">{p.name}</span>
                   </PaletteItem>
                 ))}
               </Command.Group>
             ) : null}
 
-            <Command.Group
-              heading="Actions"
-              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest [&_[cmdk-group-heading]]:text-hive-muted"
-            >
+            <Command.Group heading="Actions" className={GROUP_CLS}>
               {projects.map((p) => (
                 <PaletteItem
                   key={`term-${p.id}`}
                   value={`open terminal ${p.name}`}
                   onSelect={() => go(`/projects/${p.id}?terminal=claude`)}
                 >
-                  Open terminal in <span className="text-hive-amber">{p.name}</span>
+                  Open terminal in <span className="text-primary">{p.name}</span>
                 </PaletteItem>
               ))}
               <PaletteItem onSelect={stopAll}>
-                <span className="text-red-300">Stop all running sessions</span>
+                <span className="text-destructive">
+                  Stop all running sessions
+                </span>
               </PaletteItem>
             </Command.Group>
           </Command.List>
@@ -259,7 +238,7 @@ function PaletteItem({ onSelect, children, value }: PaletteItemProps) {
     <Command.Item
       onSelect={onSelect}
       value={value}
-      className="font-mono text-sm text-hive-text/90 px-3 py-2 cursor-pointer rounded-none data-[selected=true]:bg-hive-amber/15 data-[selected=true]:text-hive-amber data-[selected=true]:border-l-2 data-[selected=true]:border-hive-amber"
+      className="flex h-9 cursor-pointer items-center rounded-md px-3 font-mono text-[13px] text-muted-foreground data-[selected=true]:bg-surface-2 data-[selected=true]:text-foreground"
     >
       {children}
     </Command.Item>

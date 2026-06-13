@@ -8,11 +8,20 @@ type ShellProps = {
 
 export function Shell({ children }: ShellProps) {
   return (
-    <div className="min-h-screen bg-hive-bg text-hive-text">
+    <div className="relative isolate min-h-screen bg-background text-foreground">
+      {/* Atmósfera: aurora ámbar + grano de ruido, fija detrás de todo */}
+      <div
+        aria-hidden="true"
+        className="noise pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+      >
+        <div className="shell-aurora" />
+      </div>
+
       <Sidebar />
-      <div className="pl-[240px] flex flex-col min-h-screen">
+
+      <div className="flex min-h-screen flex-col pl-[240px]">
         <TopBar />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 p-6">{children}</main>
         <StatusBar />
       </div>
     </div>

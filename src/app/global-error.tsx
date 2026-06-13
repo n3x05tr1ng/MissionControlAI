@@ -8,10 +8,10 @@ type Props = {
 };
 
 // Renders when an error escapes the root layout itself (very rare).
-// Must include its own <html>/<body> per Next conventions.
+// Must include its own <html>/<body> per Next conventions; globals.css may
+// not be loaded here, so it uses inline styles with the token values.
 export default function GlobalError({ error, reset }: Props) {
   useEffect(() => {
-    // eslint-disable-next-line no-console
     console.error("[Hive] global error:", error);
   }, [error]);
 
@@ -20,8 +20,8 @@ export default function GlobalError({ error, reset }: Props) {
       <body
         style={{
           margin: 0,
-          background: "#0b0d0f",
-          color: "#e6e6e6",
+          background: "#121211",
+          color: "#f2f1ee",
           fontFamily:
             "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
           minHeight: "100vh",
@@ -35,8 +35,9 @@ export default function GlobalError({ error, reset }: Props) {
           style={{
             maxWidth: 560,
             width: "100%",
-            border: "1px solid rgba(255, 92, 92, 0.6)",
-            background: "#13161a",
+            border: "1px solid rgba(244, 110, 92, 0.4)",
+            background: "#1a1a18",
+            borderRadius: 12,
             padding: 20,
             display: "flex",
             flexDirection: "column",
@@ -46,18 +47,19 @@ export default function GlobalError({ error, reset }: Props) {
           <h1
             style={{
               fontSize: 11,
-              letterSpacing: "0.2em",
+              letterSpacing: "0.08em",
               textTransform: "uppercase",
-              color: "#ff5c5c",
+              color: "#f46e5c",
               margin: 0,
             }}
           >
-            [ HIVE CRASHED ]
+            [ Hive crashed ]
           </h1>
           <pre
             style={{
-              border: "1px solid #23282e",
-              background: "#0b0d0f",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              background: "#121211",
+              borderRadius: 8,
               padding: 12,
               fontSize: 12,
               whiteSpace: "pre-wrap",
@@ -73,13 +75,13 @@ export default function GlobalError({ error, reset }: Props) {
               type="button"
               onClick={() => reset()}
               style={{
-                border: "1px solid #FFB000",
-                background: "rgba(255, 176, 0, 0.1)",
-                color: "#FFB000",
-                padding: "6px 12px",
-                fontSize: 12,
-                textTransform: "uppercase",
-                letterSpacing: "0.2em",
+                border: "none",
+                background: "#e3a44e",
+                color: "#26190a",
+                borderRadius: 8,
+                padding: "7px 14px",
+                fontSize: 13,
+                fontWeight: 500,
                 cursor: "pointer",
               }}
             >

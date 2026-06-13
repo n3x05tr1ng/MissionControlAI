@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 type Shortcut = {
@@ -55,13 +55,19 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return false;
 }
 
+// Detección SSR-safe de "ya estamos en el cliente" sin setState en effect.
+const emptySubscribe = () => () => {};
+function useMounted(): boolean {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+}
+
 export function Cheatsheet() {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useMounted();
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -90,7 +96,7 @@ export function Cheatsheet() {
         aria-label="Keyboard shortcuts"
         title="Keyboard shortcuts (?)"
         onClick={() => setOpen(true)}
-        className="fixed bottom-9 right-3 z-40 flex h-7 w-7 items-center justify-center border border-hive-border bg-hive-panel font-mono text-sm text-hive-amber hover:border-hive-amber hover:bg-hive-amber/10 transition-colors duration-150 ease-out shadow-lg"
+        className="fixed bottom-10 right-3 z-40 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface-1 font-mono text-[13px] text-muted-foreground hover:bg-surface-2 hover:text-primary"
       >
         ?
       </button>
@@ -98,52 +104,52 @@ export function Cheatsheet() {
       {open
         ? createPortal(
             <div
-              className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 hive-modal-overlay"
+              className="hive-modal-overlay fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]"
               onClick={() => setOpen(false)}
             >
               <div
-                className="w-full max-w-lg border border-hive-border bg-hive-panel hive-modal-panel"
+                className="glass animate-overlay w-full max-w-lg overflow-hidden rounded-xl shadow-overlay"
                 onClick={(e) => e.stopPropagation()}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="cheatsheet-title"
               >
-                <header className="flex items-center justify-between border-b border-hive-border px-4 py-2">
+                <header className="flex items-center justify-between border-b border-border px-4 py-3">
                   <h2
                     id="cheatsheet-title"
-                    className="font-mono text-[10px] uppercase tracking-widest text-hive-amber"
+                    className="text-sm font-medium text-foreground"
                   >
-                    [ KEYBOARD SHORTCUTS ]
+                    Keyboard shortcuts
                   </h2>
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
                     aria-label="Close"
-                    className="font-mono text-xs text-hive-muted hover:text-hive-amber transition-colors duration-150 ease-out"
+                    className="keycap hover:text-foreground"
                   >
-                    [ ESC ]
+                    esc
                   </button>
                 </header>
-                <div className="px-4 py-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
+                <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto px-4 py-4">
                   {SECTIONS.map((section) => (
                     <section key={section.title} className="flex flex-col gap-2">
-                      <h3 className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+                      <h3 className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
                         {section.title}
                       </h3>
                       <ul className="flex flex-col gap-1.5">
                         {section.items.map((item, idx) => (
                           <li
                             key={`${section.title}-${idx}`}
-                            className="flex items-center justify-between gap-3 text-sm"
+                            className="flex items-center justify-between gap-3 text-[13px]"
                           >
-                            <span className="text-hive-text/90">
+                            <span className="text-foreground/90">
                               {item.description}
                             </span>
                             <span className="flex items-center gap-1">
                               {item.keys.map((k, kIdx) => (
                                 <kbd
                                   key={`${item.description}-${kIdx}`}
-                                  className="border border-hive-amber/40 bg-hive-amber/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-hive-amber"
+                                  className="keycap"
                                 >
                                   {k}
                                 </kbd>
@@ -154,7 +160,7 @@ export function Cheatsheet() {
                       </ul>
                     </section>
                   ))}
-                  <p className="pt-2 border-t border-hive-border text-[11px] text-hive-muted font-mono">
+                  <p className="border-t border-border pt-3 font-mono text-[11px] text-faint">
                     Only the wired shortcuts are listed. More coming in v0.4.
                   </p>
                 </div>

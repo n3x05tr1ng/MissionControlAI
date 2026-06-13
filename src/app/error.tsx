@@ -11,17 +11,19 @@ type Props = {
 export default function GlobalRouteError({ error, reset }: Props) {
   useEffect(() => {
     // Log to the console; the dev terminal will show it. No remote telemetry.
-    // eslint-disable-next-line no-console
     console.error("[Hive] route error:", error);
   }, [error]);
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center p-6">
-      <div className="w-full max-w-xl border border-red-500/60 bg-hive-panel p-5 flex flex-col gap-4">
-        <h1 className="font-mono text-[11px] uppercase tracking-widest text-red-400">
-          [ SOMETHING WENT WRONG ]
-        </h1>
-        <pre className="border border-hive-border bg-hive-bg/60 p-3 font-mono text-xs text-hive-text whitespace-pre-wrap break-words">
+      <div className="animate-enter flex w-full max-w-xl flex-col gap-4 rounded-lg border border-destructive/40 bg-surface-1 p-5 shadow-bevel">
+        <div>
+          <p className="hive-overline text-destructive">[ Route error ]</p>
+          <h1 className="mt-1.5 text-xl font-semibold tracking-tight text-foreground">
+            Something went wrong
+          </h1>
+        </div>
+        <pre className="whitespace-pre-wrap break-words rounded-md border border-border bg-background/60 p-3 font-mono text-xs text-foreground">
           {error.message || "Unknown error"}
           {error.digest ? `\n\ndigest: ${error.digest}` : ""}
         </pre>
@@ -29,13 +31,13 @@ export default function GlobalRouteError({ error, reset }: Props) {
           <button
             type="button"
             onClick={() => reset()}
-            className="border border-hive-amber bg-hive-amber/10 px-3 py-1 text-xs uppercase tracking-widest text-hive-amber hover:bg-hive-amber/20"
+            className="h-8 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary-hover"
           >
             Reload
           </button>
           <Link
             href="/"
-            className="border border-hive-border px-3 py-1 text-xs uppercase tracking-widest text-hive-muted hover:text-hive-text"
+            className="flex h-8 items-center rounded-md border border-border bg-surface-2 px-3 text-[13px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground"
           >
             Go home
           </Link>

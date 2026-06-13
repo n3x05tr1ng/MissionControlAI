@@ -34,7 +34,7 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-hive-bg text-hive-text">
+      <body className="min-h-full flex flex-col bg-background text-foreground">
         <Toaster />
         <ConfirmHost />
         <CommandPalette />

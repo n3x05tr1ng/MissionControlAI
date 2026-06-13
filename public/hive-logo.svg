@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="hive-amber" x1="10" y1="6" x2="38" y2="42" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f2c069"/>
+      <stop offset="1" stop-color="#d2913a"/>
+    </linearGradient>
+    <filter id="hive-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#hive-glow)">
+    <path d="M24 5 40.5 14.5v19L24 43 7.5 33.5v-19z" stroke="url(#hive-amber)" stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="M24 15.5 31.5 19.9v8.8L24 33l-7.5-4.3v-8.8z" stroke="url(#hive-amber)" stroke-width="1.7" stroke-linejoin="round" opacity="0.85"/>
+    <circle cx="24" cy="24" r="2.2" fill="#f2c069"/>
+  </g>
+</svg>

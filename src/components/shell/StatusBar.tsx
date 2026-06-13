@@ -9,10 +9,12 @@ export async function StatusBar() {
     : "scheduler: warming up";
 
   return (
-    <footer className="h-7 flex items-center justify-between border-t border-hive-border bg-hive-panel px-3 font-mono text-xs text-hive-muted">
-      <span className="text-hive-amber/80">Hive v0.1.0</span>
-      <span className="hidden md:inline text-hive-text/60">{tickLabel}</span>
-      <time dateTime={now}>{now}</time>
+    <footer className="flex h-7 shrink-0 items-center justify-between border-t border-border bg-surface-1/60 px-3 font-mono text-[11px] text-faint backdrop-blur-md">
+      <span className="text-primary/80">Hive v0.1.0</span>
+      <span className="hidden text-muted-foreground md:inline">{tickLabel}</span>
+      <time dateTime={now} className="tabular-nums">
+        {now}
+      </time>
     </footer>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 export interface ConfirmOptions {
@@ -40,12 +40,21 @@ export function useConfirm(): (options: ConfirmOptions) => Promise<boolean> {
   return useCallback((options) => confirm(options), []);
 }
 
+// Detección SSR-safe de cliente sin setState dentro del effect.
+const emptySubscribe = () => () => {};
+function useMounted(): boolean {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+}
+
 export function ConfirmHost() {
   const [pending, setPending] = useState<PendingConfirm | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
 
   useEffect(() => {
-    setMounted(true);
     setListener((req) => setPending(req));
     return () => {
       setListener(null);
@@ -56,7 +65,9 @@ export function ConfirmHost() {
     if (!pending) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") settle(false);
-      if (e.key === "Enter") settle(true);
+      // Enter solo confirma acciones NO destructivas; las peligrosas
+      // requieren un click (o tab + enter sobre el botón enfocado).
+      if (e.key === "Enter" && !pending?.danger) settle(true);
     }
     function settle(value: boolean) {
       pending?.resolve(value);
@@ -82,48 +93,51 @@ export function ConfirmHost() {
   }
 
   const actionClass = danger
-    ? "border-red-500/60 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-    : "border-hive-amber bg-hive-amber/10 text-hive-amber hover:bg-hive-amber/20";
+    ? "border border-destructive/40 bg-destructive-soft text-destructive hover:bg-destructive/25"
+    : "bg-primary text-primary-foreground hover:bg-primary-hover";
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 hive-modal-overlay"
+      className="hive-modal-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]"
       onClick={() => settle(false)}
     >
       <div
-        className="w-full max-w-md border border-hive-border bg-hive-panel hive-modal-panel"
+        className="glass animate-overlay w-full max-w-md overflow-hidden rounded-xl shadow-overlay"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
       >
-        <header className="border-b border-hive-border px-4 py-2">
-          <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-            [ {title} ]
+        <div className="flex flex-col gap-3 px-5 pb-4 pt-5">
+          <h2
+            id="confirm-dialog-title"
+            className="text-[15px] font-semibold text-foreground"
+          >
+            {title}
           </h2>
-        </header>
-        <div className="px-4 py-4 flex flex-col gap-4">
           {message ? (
-            <p className="text-sm text-hive-text whitespace-pre-wrap">
+            <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted-foreground">
               {message}
             </p>
           ) : null}
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => settle(false)}
-              className="border border-hive-border px-3 py-1 text-xs uppercase tracking-widest text-hive-muted hover:text-hive-text"
-            >
-              {cancelLabel}
-            </button>
-            <button
-              type="button"
-              onClick={() => settle(true)}
-              autoFocus
-              className={`border px-3 py-1 text-xs uppercase tracking-widest ${actionClass}`}
-            >
-              {confirmLabel}
-            </button>
-          </div>
+        </div>
+        <div className="flex justify-end gap-2 px-5 pb-5">
+          <button
+            type="button"
+            onClick={() => settle(false)}
+            autoFocus={danger}
+            className="h-8 rounded-md border border-border bg-surface-2 px-3 text-[13px] font-medium text-muted-foreground hover:bg-surface-3 hover:text-foreground"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => settle(true)}
+            autoFocus={!danger}
+            className={`h-8 rounded-md px-3 text-[13px] font-medium ${actionClass}`}
+          >
+            {confirmLabel}
+          </button>
         </div>
       </div>
     </div>,

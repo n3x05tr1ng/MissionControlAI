@@ -95,73 +95,82 @@ export function BackgroundRunsWidget() {
       <button
         type="button"
         onClick={() => setOpenDrawer(true)}
-        className="flex items-center gap-2 px-4 py-2 text-left hover:bg-hive-bg/40 transition-colors w-full"
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-2"
         title={hasRuns ? "Show active runs" : "No active runs"}
       >
         {hasRuns ? (
           <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-hive-green opacity-75 animate-ping" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-hive-green" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
           </span>
         ) : (
-          <span className="inline-flex h-2 w-2 rounded-full bg-hive-muted/40" />
+          <span className="inline-flex h-2 w-2 rounded-full bg-faint/40" />
         )}
-        <span className="font-mono text-[10px] uppercase tracking-widest text-hive-muted">
+        <span className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground">
           {hasRuns
-            ? `${runs.length} run${runs.length === 1 ? "" : "s"}`
+            ? `${runs.length} run${runs.length === 1 ? "" : "s"} active`
             : "no active runs"}
         </span>
       </button>
 
       {openDrawer ? (
         <div
-          className="fixed inset-0 z-[110] flex justify-end bg-black/50"
+          className="hive-modal-overlay fixed inset-0 z-[110] flex justify-end bg-black/50 backdrop-blur-[2px]"
           onClick={() => setOpenDrawer(false)}
         >
           <div
-            className="w-[360px] h-full border-l border-hive-border bg-hive-panel flex flex-col"
+            className="glass flex h-full w-[360px] flex-col rounded-l-xl shadow-overlay"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="active-runs-title"
           >
-            <header className="border-b border-hive-border px-4 py-2 flex items-center justify-between">
-              <h2 className="font-mono text-[10px] uppercase tracking-widest text-hive-amber">
-                [ ACTIVE RUNS ]
+            <header className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h2
+                id="active-runs-title"
+                className="text-sm font-medium text-foreground"
+              >
+                Active runs
               </h2>
               <button
                 type="button"
                 onClick={() => setOpenDrawer(false)}
-                className="text-hive-muted hover:text-hive-amber text-sm"
+                aria-label="Close"
+                className="keycap hover:text-foreground"
               >
-                ✕
+                esc
               </button>
             </header>
             <div className="flex-1 overflow-y-auto">
               {runs.length === 0 ? (
-                <p className="px-4 py-6 font-mono text-xs text-hive-muted">
+                <p className="px-4 py-6 font-mono text-xs text-faint">
                   no active runs.
                 </p>
               ) : (
-                <ul className="divide-y divide-hive-border">
+                <ul className="divide-y divide-border">
                   {runs.map((r) => (
                     <li
                       key={r.sessionId}
-                      className="px-4 py-3 flex flex-col gap-1"
+                      className="flex flex-col gap-1 px-4 py-3 hover:bg-surface-2"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-hive-amber">
+                        <span className="text-sm text-foreground">
                           {r.projectName}
                         </span>
                         <button
                           type="button"
                           onClick={() => stopOne(r)}
-                          className="border border-red-500/60 bg-red-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-red-300 hover:bg-red-500/20"
+                          className="rounded-md border border-destructive/40 bg-destructive-soft px-2 py-0.5 font-mono text-[11px] text-destructive hover:bg-destructive/25"
                         >
                           stop
                         </button>
                       </div>
-                      <div className="flex items-center gap-2 font-mono text-[10px] text-hive-muted">
+                      <div className="flex items-center gap-2 font-mono text-[11px] text-faint">
                         <span>{r.sessionId.slice(0, 8)}</span>
                         <span>·</span>
-                        <span>{fmtAge(Math.max(0, now - r.startedAt))}</span>
+                        <span className="tabular-nums">
+                          {fmtAge(Math.max(0, now - r.startedAt))}
+                        </span>
                       </div>
                     </li>
                   ))}

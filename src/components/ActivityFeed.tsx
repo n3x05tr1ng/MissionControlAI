@@ -41,20 +41,20 @@ function kindLabel(ev: AgentEvent): string {
 function kindColorClass(ev: AgentEvent): string {
   switch (ev.type) {
     case "session.start":
-      return "text-hive-cyan";
+      return "text-info";
     case "session.end":
-      return ev.result === "error" ? "text-hive-red" : "text-hive-green";
+      return ev.result === "error" ? "text-destructive" : "text-success";
     case "message":
-      return "text-hive-amber";
+      return "text-primary";
     case "tool.use":
-      return "text-hive-yellow";
+      return "text-warning";
     case "tool.result":
-      return "text-hive-muted";
+      return "text-faint";
     case "error":
-      return "text-hive-red";
+      return "text-destructive";
     case "log":
     default:
-      return "text-hive-muted";
+      return "text-faint";
   }
 }
 
@@ -62,14 +62,14 @@ function renderBody(ev: AgentEvent): React.ReactNode {
   switch (ev.type) {
     case "session.start":
       return (
-        <span className="text-hive-muted">
+        <span className="text-muted-foreground">
           session {ev.sessionId.slice(0, 8)} started
         </span>
       );
     case "message": {
       const prefix = ev.role === "assistant" ? "> " : "";
       return (
-        <pre className="whitespace-pre-wrap break-words font-mono text-xs text-hive-text">
+        <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
           {prefix}
           {ev.text}
         </pre>
@@ -77,16 +77,16 @@ function renderBody(ev: AgentEvent): React.ReactNode {
     }
     case "tool.use":
       return (
-        <span className="text-hive-text/90">
-          <span className="text-hive-yellow">{ev.name}</span>{" "}
-          <span className="text-hive-muted">
+        <span className="text-foreground/90">
+          <span className="text-warning">{ev.name}</span>{" "}
+          <span className="text-faint">
             {truncate(safeStringify(ev.input), TRUNCATE_AT)}
           </span>
         </span>
       );
     case "tool.result":
       return (
-        <span className="text-hive-muted">
+        <span className="text-faint">
           {ev.name}: {truncate(safeStringify(ev.output), TRUNCATE_AT)}
         </span>
       );
@@ -96,16 +96,16 @@ function renderBody(ev: AgentEvent): React.ReactNode {
       const tokens = `${ev.tokens.input}/${ev.tokens.output} tokens`;
       const files = `${ev.filesTouched.length} files`;
       return (
-        <span className="text-hive-text/90">
+        <span className="text-foreground/90">
           {okOrErr} · {cost} · {tokens} · {files}
         </span>
       );
     }
     case "error":
-      return <span className="text-hive-red">{ev.message}</span>;
+      return <span className="text-destructive">{ev.message}</span>;
     case "log":
       return (
-        <span className="text-hive-muted">
+        <span className="text-faint">
           [{ev.level}] {ev.message}
         </span>
       );
@@ -131,7 +131,10 @@ export function ActivityFeed({ projectId, onRunStateChange }: Props) {
       try {
         const ev = JSON.parse(msg.data) as AgentEvent;
         setEvents((prev) => {
-          const next = prev.length >= MAX_EVENTS ? prev.slice(-MAX_EVENTS + 1) : prev.slice();
+          const next =
+            prev.length >= MAX_EVENTS
+              ? prev.slice(-MAX_EVENTS + 1)
+              : prev.slice();
           next.push(ev);
           return next;
         });
@@ -172,19 +175,23 @@ export function ActivityFeed({ projectId, onRunStateChange }: Props) {
     <div
       ref={scrollerRef}
       onScroll={handleScroll}
-      className="h-[360px] overflow-y-auto border border-hive-border bg-hive-bg/40 p-3 font-mono text-xs leading-relaxed"
+      className="h-[360px] overflow-y-auto rounded-lg border border-border bg-background/60 p-3 font-mono text-xs leading-relaxed"
     >
       {events.length === 0 ? (
-        <p className="text-hive-muted">Waiting for activity...</p>
+        <p className="text-faint">Waiting for activity...</p>
       ) : (
         <ul className="space-y-1">
           {events.map((ev, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="shrink-0 text-hive-muted">{formatTime(ev.ts)}</span>
+            <li key={i} className="flex gap-2 rounded-xs px-1 -mx-1 transition-colors hover:bg-surface-2">
+              <span className="shrink-0 tabular-nums text-faint">
+                {formatTime(ev.ts)}
+              </span>
               <span className={`shrink-0 ${kindColorClass(ev)}`}>
                 [{kindLabel(ev)}]
               </span>
-              <span className="min-w-0 flex-1 break-words">{renderBody(ev)}</span>
+              <span className="min-w-0 flex-1 break-words">
+                {renderBody(ev)}
+              </span>
             </li>
           ))}
         </ul>

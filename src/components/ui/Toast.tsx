@@ -2,7 +2,8 @@
 
 import { Toaster as SonnerToaster } from "sonner";
 
-// Single instance mounted from app/layout.tsx. Themed to match Hive.
+// Single instance mounted from app/layout.tsx.
+// Tematizado 100% con tokens CSS — nada de hex hardcodeados.
 export function Toaster() {
   return (
     <SonnerToaster
@@ -12,12 +13,15 @@ export function Toaster() {
       closeButton
       toastOptions={{
         style: {
-          background: "#13161a",
-          border: "1px solid #23282e",
-          color: "#e6e6e6",
-          fontFamily: "var(--font-mono)",
-          fontSize: "12px",
-          letterSpacing: "0.04em",
+          background: "var(--glass-bg)",
+          backdropFilter: "blur(var(--glass-blur)) saturate(1.4)",
+          WebkitBackdropFilter: "blur(var(--glass-blur)) saturate(1.4)",
+          border: "1px solid var(--border-strong)",
+          borderRadius: "var(--radius-lg)",
+          boxShadow: "var(--shadow-overlay)",
+          color: "var(--foreground)",
+          fontFamily: "var(--font-sans)",
+          fontSize: "13px",
         },
         classNames: {
           success: "hive-toast-success",

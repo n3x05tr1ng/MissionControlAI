@@ -13,30 +13,31 @@ type PillProps = {
 };
 
 const DOT_TONE: Record<Tone, string> = {
-  green: "bg-emerald-400",
-  amber: "bg-hive-amber",
-  muted: "bg-hive-muted",
+  green: "bg-success",
+  amber: "bg-primary",
+  muted: "bg-faint",
 };
 
 function Pill({ label, value, tone = "muted", href }: PillProps) {
-  const body = (
-    <span className="inline-flex items-center gap-2 border border-hive-border bg-hive-bg/40 px-2 py-1 font-mono text-[11px] text-hive-muted">
+  return (
+    <span className="inline-flex h-7 items-center gap-2 rounded-full border border-border bg-surface-1/60 px-3 font-mono text-[11px] text-muted-foreground">
       <span className={`h-1.5 w-1.5 rounded-full ${DOT_TONE[tone]}`} />
-      <span className="uppercase tracking-wider">{label}</span>
-      <span className="text-hive-text/70">{value}</span>
+      <span>{label}</span>
+      <span className="text-foreground/70">{value}</span>
       {href ? (
         <Link
           href={href}
-          className="ml-1 text-hive-amber/80 hover:text-hive-amber underline-offset-2 hover:underline"
+          className="ml-0.5 text-primary underline-offset-2 hover:text-primary-hover hover:underline"
         >
           fix
         </Link>
       ) : null}
     </span>
   );
-  return body;
 }
 
+// Titlebar integrada de 48px: continua con el fondo del shell, sin línea
+// divisoria. Las páginas ponen su propio H1 con <PageHeader />.
 export async function TopBar() {
   const scheduler = getSchedulerStatus();
   const anthropicReady = hasAnthropicKey();
@@ -50,17 +51,14 @@ export async function TopBar() {
   const anthropicValue = anthropicReady ? "configured" : "not configured";
 
   return (
-    <header className="h-12 flex items-center justify-between border-b border-hive-border bg-hive-panel px-4">
-      <div className="flex items-center gap-2 font-mono text-xs text-hive-muted" />
-      <div className="flex items-center gap-2">
-        <Pill label="scheduler" value={schedulerValue} tone={schedulerTone} />
-        <Pill
-          label="anthropic"
-          value={anthropicValue}
-          tone={anthropicTone}
-          href={anthropicReady ? undefined : "/settings"}
-        />
-      </div>
+    <header className="flex h-12 shrink-0 items-center justify-end gap-2 px-4">
+      <Pill label="scheduler" value={schedulerValue} tone={schedulerTone} />
+      <Pill
+        label="anthropic"
+        value={anthropicValue}
+        tone={anthropicTone}
+        href={anthropicReady ? undefined : "/settings"}
+      />
     </header>
   );
 }
