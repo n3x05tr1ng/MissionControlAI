@@ -71,10 +71,15 @@ PKG
     "ws@$(node -p "require('${REPO_ROOT}/node_modules/ws/package.json').version")" )
 
 # 4) Bundle the Node runtime as the sidecar binary.
-echo "==> bundling node -> binaries/hive-node-${TRIPLE}"
+# On Windows (Git Bash in CI) the binary is node.exe and Tauri expects the
+# .exe suffix on the triple-named sidecar too.
+NODE_BIN="$(command -v node)"
+EXT=""
+case "${TRIPLE}" in *windows*) EXT=".exe" ;; esac
+echo "==> bundling node -> binaries/hive-node-${TRIPLE}${EXT}"
 mkdir -p "${TAURI_DIR}/binaries"
-cp "$(command -v node)" "${TAURI_DIR}/binaries/hive-node-${TRIPLE}"
-chmod +x "${TAURI_DIR}/binaries/hive-node-${TRIPLE}"
+cp "${NODE_BIN}" "${TAURI_DIR}/binaries/hive-node-${TRIPLE}${EXT}"
+chmod +x "${TAURI_DIR}/binaries/hive-node-${TRIPLE}${EXT}"
 
 echo "==> assembly complete"
 
@@ -84,6 +89,8 @@ if [ "${1:-assemble}" = "build" ]; then
   if [ -x "./node_modules/.bin/tauri" ]; then TAURI="./node_modules/.bin/tauri";
   elif command -v cargo-tauri >/dev/null 2>&1; then TAURI="cargo tauri";
   else TAURI="tauri"; fi
-  ${TAURI} build
+  # TAURI_BUNDLES overrides the bundle targets (e.g. TAURI_BUNDLES=nsis on
+  # Windows CI, where the default app/dmg targets don't exist).
+  ${TAURI} build ${TAURI_BUNDLES:+--bundles ${TAURI_BUNDLES}}
   echo "==> done — see src-tauri/target/release/bundle/"
 fi

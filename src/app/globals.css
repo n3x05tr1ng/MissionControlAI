@@ -58,6 +58,63 @@
   --duration-micro: 120ms;
   --duration-base: 180ms;
   --duration-overlay: 280ms;
+
+  /* Piezas tematizables que antes eran literales (scrollbar, dot-grid,
+     ai-border, aurora). En dark mantienen exactamente los valores previos. */
+  --scrollbar-thumb: oklch(1 0 0 / 12%);
+  --scrollbar-thumb-hover: oklch(1 0 0 / 22%);
+  --dot-grid-dot: oklch(1 0 0 / 7%);
+  --ai-border-mid: oklch(1 0 0 / 10%);
+  --aurora-opacity: 0.13;
+
+  color-scheme: dark;
+}
+
+/* ----------------------------------------------------------------------------
+   TEMA CLARO — "papel cálido". Mismo hue ~80/85 que el dark, ámbar más
+   profundo para contraste AA sobre claro. El terminal embebido se queda
+   oscuro a propósito (firma de la marca, como los IDE en modo claro).
+   Se activa con <html data-theme="light">; el default (sin atributo) es dark.
+---------------------------------------------------------------------------- */
+:root[data-theme="light"] {
+  --background: oklch(0.965 0.005 85);
+  --surface-1: oklch(0.985 0.003 85);
+  --surface-2: oklch(0.94 0.005 85);
+  --surface-3: oklch(0.91 0.006 85);
+  --popover: oklch(0.99 0.002 85);
+
+  --foreground: oklch(0.25 0.012 80);
+  --muted-foreground: oklch(0.45 0.012 80);
+  --faint: oklch(0.585 0.01 80);
+
+  --border: oklch(0 0 0 / 10%);
+  --border-strong: oklch(0 0 0 / 16%);
+  --input: oklch(0 0 0 / 12%);
+
+  --primary: oklch(0.63 0.135 72);
+  --primary-hover: oklch(0.58 0.14 70);
+  --primary-soft: oklch(0.63 0.135 72 / 14%);
+  --primary-foreground: oklch(0.995 0.005 85);
+  --ring: oklch(0.63 0.135 72 / 55%);
+
+  --success: oklch(0.55 0.12 162);
+  --success-soft: oklch(0.55 0.12 162 / 14%);
+  --destructive: oklch(0.55 0.19 25);
+  --destructive-soft: oklch(0.55 0.19 25 / 14%);
+  --warning: oklch(0.66 0.135 78);
+  --warning-soft: oklch(0.66 0.135 78 / 16%);
+  --info: oklch(0.55 0.10 240);
+  --info-soft: oklch(0.55 0.10 240 / 14%);
+
+  --glass-bg: oklch(0.985 0.003 85 / 72%);
+
+  --scrollbar-thumb: oklch(0 0 0 / 15%);
+  --scrollbar-thumb-hover: oklch(0 0 0 / 28%);
+  --dot-grid-dot: oklch(0 0 0 / 8%);
+  --ai-border-mid: oklch(0 0 0 / 10%);
+  --aurora-opacity: 0.1;
+
+  color-scheme: light;
 }
 
 @theme {
@@ -165,13 +222,13 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: oklch(1 0 0 / 12%);
+  background: var(--scrollbar-thumb);
   border-radius: 9999px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(1 0 0 / 22%);
+  background: var(--scrollbar-thumb-hover);
   border: 3px solid transparent;
   background-clip: padding-box;
 }
@@ -385,7 +442,7 @@ body {
     height: 70vh;
     width: 100vw;
     transform: translateX(-50%);
-    opacity: 0.13;
+    opacity: var(--aurora-opacity);
     background:
       radial-gradient(38% 50% at 30% 40%, var(--primary) 0%, transparent 70%),
       radial-gradient(
@@ -417,8 +474,8 @@ body {
     background: linear-gradient(
       135deg,
       var(--primary) 0%,
-      oklch(1 0 0 / 10%) 40%,
-      oklch(1 0 0 / 10%) 60%,
+      var(--ai-border-mid) 40%,
+      var(--ai-border-mid) 60%,
       oklch(0.665 0.115 41) 100%
     );
     -webkit-mask:
@@ -430,7 +487,7 @@ body {
 
   /* Patrón de puntos para secciones técnicas, desvanecido hacia abajo */
   .dot-grid {
-    background-image: radial-gradient(oklch(1 0 0 / 7%) 1px, transparent 1px);
+    background-image: radial-gradient(var(--dot-grid-dot) 1px, transparent 1px);
     background-size: 20px 20px;
     mask-image: radial-gradient(
       ellipse 60% 50% at 50% 0%,

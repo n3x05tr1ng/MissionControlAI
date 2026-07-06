@@ -97,6 +97,24 @@ export default async function ProjectPage({ params }: PageProps) {
         }
       />
 
+      {!snapshot.pathExists ? (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground"
+        >
+          <p className="font-medium">
+            Project folder not found:{" "}
+            <code className="font-mono text-[12px]">{cfg.path}</code>
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            The folder was moved, renamed or deleted, so the terminal, git
+            panel and runs can&apos;t start. Fix the path from the dashboard:
+            open the <span className="font-medium">⋯ menu</span> on this
+            project&apos;s card and choose{" "}
+            <span className="font-medium">Edit</span>.
+          </p>
+        </div>
+      ) : null}
       <ProjectSplit
         projectId={cfg.id}
         snapshot={snapshot}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { getSchedulerStatus } from "@/lib/scheduler";
 import { hasAnthropicKey } from "@/lib/settings";
 
@@ -59,6 +60,7 @@ export async function TopBar() {
         tone={anthropicTone}
         href={anthropicReady ? undefined : "/settings"}
       />
+      <ThemeToggle />
     </header>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+
+import { BRAND } from "@/lib/brand";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -135,7 +137,7 @@ export function Sidebar() {
         <span className="relative flex h-6 w-6 items-center justify-center" aria-hidden="true">
           <span className="absolute inset-0 rounded-full bg-primary-soft blur-md" />
           <Image
-            src="/hive-logo.svg"
+            src={BRAND.logoSrc}
             alt=""
             width={22}
             height={22}
@@ -145,7 +147,7 @@ export function Sidebar() {
           />
         </span>
         <span className="font-mono text-sm font-medium tracking-[0.18em] text-foreground">
-          HIVE
+          {BRAND.wordmark}
         </span>
       </div>
 

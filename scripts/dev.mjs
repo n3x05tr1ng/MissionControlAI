@@ -6,10 +6,21 @@ const children = [];
 let firstFailureCode = 0;
 let shuttingDown = false;
 
+// When next dev runs on a non-default port (PORT=3200 npm run dev), the
+// terminal server must also allow that origin for its WebSocket upgrades.
+const DEV_PORT = process.env.PORT || "3000";
+const DEV_ORIGINS = `http://localhost:${DEV_PORT},http://127.0.0.1:${DEV_PORT}`;
+const childEnv = {
+  ...process.env,
+  HIVE_ALLOWED_ORIGINS: [process.env.HIVE_ALLOWED_ORIGINS, DEV_ORIGINS]
+    .filter(Boolean)
+    .join(","),
+};
+
 function startChild(label, cmd, args, { critical = true } = {}) {
   const child = spawn(cmd, args, {
     stdio: ["ignore", "pipe", "pipe"],
-    env: process.env,
+    env: childEnv,
   });
   children.push({ label, child });
 

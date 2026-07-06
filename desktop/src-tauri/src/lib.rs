@@ -235,10 +235,22 @@ fn stop_pid(slot: &Mutex<Option<u32>>) {
             unsafe {
                 libc::kill(pid as i32, libc::SIGTERM);
             }
+            #[cfg(unix)]
             std::thread::sleep(Duration::from_millis(400));
             #[cfg(unix)]
             unsafe {
                 libc::kill(pid as i32, libc::SIGKILL);
+            }
+            // Windows has no SIGTERM: kill the whole process tree (/T) so the
+            // Node children and any PTY shells they own die with the window.
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/PID", &pid.to_string(), "/T", "/F"])
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .status();
             }
         }
     }

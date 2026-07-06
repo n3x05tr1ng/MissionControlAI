@@ -22,6 +22,7 @@ const SHELL_OPTIONS: Array<{ value: ShellKind; label: string }> = [
 export function EmbeddedTerminal({ projectId, shell: initialShell }: Props) {
   const [shell, setShell] = useState<ShellKind>(initialShell ?? "claude");
   const [status, setStatus] = useState<Status>("connecting");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [reconnectKey, setReconnectKey] = useState(0);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -41,6 +42,7 @@ export function EmbeddedTerminal({ projectId, shell: initialShell }: Props) {
 
   const reconnect = useCallback(() => {
     reconnectedOnceRef.current = false;
+    setErrorMsg(null);
     setReconnectKey((k) => k + 1);
   }, []);
 
@@ -100,12 +102,17 @@ export function EmbeddedTerminal({ projectId, shell: initialShell }: Props) {
       socket.onmessage = (e: MessageEvent) => {
         const d = e.data as unknown;
         if (typeof d === "string") {
-          // PTY stdout or pong frame.
-          if (d.startsWith("{") && d.includes("\"pong\"")) {
+          // PTY stdout, pong frame, or a server-side failure explanation.
+          if (d.startsWith("{") && (d.includes("\"pong\"") || d.includes("\"term-error\""))) {
             try {
-              const parsed = JSON.parse(d) as { type?: string };
+              const parsed = JSON.parse(d) as { type?: string; message?: string };
               if (parsed.type === "pong") {
                 lastPongRef.current = Date.now();
+                return;
+              }
+              if (parsed.type === "term-error") {
+                setErrorMsg(parsed.message ?? "Terminal failed to start.");
+                setStatus("dead");
                 return;
               }
             } catch { /* fall through */ }
@@ -116,7 +123,9 @@ export function EmbeddedTerminal({ projectId, shell: initialShell }: Props) {
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (e: CloseEvent) => {
+        // The server puts a short human reason in the close frame (1008/1011).
+        if (e.reason) setErrorMsg((m) => m ?? e.reason);
         setStatus((s) => (s === "dead" ? "dead" : "disconnected"));
       };
       socket.onerror = () => {
@@ -258,6 +267,14 @@ export function EmbeddedTerminal({ projectId, shell: initialShell }: Props) {
           </button>
         </div>
       </header>
+      {errorMsg ? (
+        <div
+          role="alert"
+          className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 font-mono text-[12px] text-foreground"
+        >
+          {errorMsg}
+        </div>
+      ) : null}
       <div
         ref={containerRef}
         className="min-h-0 w-full flex-1 overflow-hidden bg-terminal-bg p-2"

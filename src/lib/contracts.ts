@@ -88,6 +88,8 @@ export interface ProjectSnapshot {
   state: ProjectState;
   handoff: ParsedHandoff | null;
   git: GitInfo | null;
+  /** false when config.path no longer exists on disk (moved/renamed/deleted). */
+  pathExists: boolean;
 }
 
 // ---------------------------------------------------------------------------

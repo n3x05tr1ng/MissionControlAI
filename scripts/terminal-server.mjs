@@ -136,14 +136,25 @@ wss.on("connection", (ws, req) => {
   const projectId = typeof query.projectId === "string" ? query.projectId : "";
   const shell = typeof query.shell === "string" ? query.shell : "claude";
 
+  // Human-readable failure: tell the client WHY before closing so the UI can
+  // show something better than "disconnected".
+  const failWith = (message) => {
+    try { ws.send(JSON.stringify({ type: "term-error", message })); } catch { /* noop */ }
+    ws.close(1008, message.slice(0, 120));
+  };
+
   if (!projectId) {
-    ws.close(1008, "missing projectId");
+    failWith("Missing projectId in terminal request.");
     return;
   }
 
   const cwd = getProjectPath(projectId);
   if (!cwd) {
-    ws.close(1008, "project not found");
+    failWith(`Project "${projectId}" was not found in the database.`);
+    return;
+  }
+  if (!existsSync(cwd)) {
+    failWith(`Project folder does not exist: ${cwd} — fix the path in the project's Edit dialog.`);
     return;
   }
 
@@ -171,6 +182,13 @@ wss.on("connection", (ws, req) => {
     });
   } catch (err) {
     console.error(`[term] #${sessionId} spawn failed:`, err.message);
+    try {
+      ws.send(JSON.stringify({
+        type: "term-error",
+        message: `Could not start "${cmd}": ${err.message}. ` +
+          (shell === "shell" ? "Check your $SHELL." : "Is the claude CLI installed? (npm i -g @anthropic-ai/claude-code)"),
+      }));
+    } catch { /* noop */ }
     ws.close(1011, "spawn failed");
     return;
   }

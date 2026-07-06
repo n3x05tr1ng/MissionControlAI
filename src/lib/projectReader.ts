@@ -1,6 +1,6 @@
 import "server-only";
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadProjectsConfig } from "@/lib/config";
@@ -79,6 +79,7 @@ export function readProjectState(
 export async function readProjectSnapshot(
   cfg: ProjectConfig,
 ): Promise<ProjectSnapshot> {
+  const pathExists = existsSync(cfg.path);
   const [state, handoff, git] = await Promise.all([
     Promise.resolve(readProjectState(cfg.path, cfg.id)),
     Promise.resolve(readAndParseHandoff(cfg.path)),
@@ -95,7 +96,7 @@ export async function readProjectSnapshot(
     indexed_at: new Date().toISOString(),
   });
 
-  return { config: cfg, state, handoff, git };
+  return { config: cfg, state, handoff, git, pathExists };
 }
 
 export async function readAllSnapshots(): Promise<ProjectSnapshot[]> {

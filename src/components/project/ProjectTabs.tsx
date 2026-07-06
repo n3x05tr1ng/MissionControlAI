@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { InlineFileEditor } from "@/components/editors/InlineFileEditor";
 import { GitPanel } from "@/components/git/GitPanel";
@@ -59,6 +59,9 @@ export function ProjectTabs({
   activitySlot,
 }: Props) {
   const storageKey = `hive:project-tab:${projectId}`;
+  // This component mounts twice per page (desktop split + mobile layout), so
+  // DOM ids need a per-instance suffix to stay unique.
+  const uid = useId();
   const [active, setActive] = useState<TabKey>("overview");
   const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map());
 
@@ -121,9 +124,9 @@ export function ProjectTabs({
               }}
               type="button"
               role="tab"
-              id={`project-tab-${tab.key}`}
+              id={`project-tab-${tab.key}-${uid}`}
               aria-selected={isActive}
-              aria-controls={`project-panel-${tab.key}`}
+              aria-controls={`project-panel-${tab.key}-${uid}`}
               tabIndex={isActive ? 0 : -1}
               onClick={() => handleSelect(tab.key)}
               className={`relative rounded-t-md px-3 py-2.5 text-[13px] font-medium ${
@@ -147,8 +150,8 @@ export function ProjectTabs({
       <div
         key={active}
         role="tabpanel"
-        id={`project-panel-${active}`}
-        aria-labelledby={`project-tab-${active}`}
+        id={`project-panel-${active}-${uid}`}
+        aria-labelledby={`project-tab-${active}-${uid}`}
         tabIndex={0}
         className="animate-enter min-h-0 flex-1 overflow-auto p-4"
       >

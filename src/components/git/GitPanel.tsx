@@ -442,7 +442,7 @@ export function GitPanel({ projectId, initialBranch }: Props) {
             <ul className="mt-3 divide-y divide-border overflow-hidden rounded-md border border-border">
               {status.files.map((f) => (
                 <li
-                  key={f.path}
+                  key={`${f.index}${f.working}:${f.path}`}
                   className="flex items-center gap-2.5 px-2.5 py-1.5 font-mono text-[12px] hover:bg-surface-2"
                 >
                   <input
